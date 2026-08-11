@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>תיירות דיגיטלית — ממשק מורה</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1E90FF">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="כיתה פלוס">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800&family=Secular+One&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #1E90FF; --blue-dark: #0B66C7; --blue-light: #0B66C7;
+      --dark: #FFF8ED; --dark2: #FFFFFF; --dark3: #FFEFD9; --dark4: #F4DFB8;
+      --text: #1B2A3D; --muted: #6C7A8C; --error: #E5484D;
+      --success: #12A66E; --warning: #FF7A3D;
+      --teal: #0E9E8F; --purple: #8B5CF6; --purple-light: #6D28D9;
+      --gold: #F2A900;
+      --font-display: 'Secular One', 'Heebo', sans-serif;
+    }
+    body {
+      font-family: 'Heebo', sans-serif; background: var(--dark); color: var(--text); min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse 900px 500px at 100% -10%, rgba(30,144,255,0.09), transparent 60%),
+        radial-gradient(ellipse 700px 500px at -10% 10%, rgba(255,122,61,0.06), transparent 60%);
+      background-attachment: fixed;
+    }
+
+    .topbar { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(27,42,61,0.07); padding: 0 24px; height: 66px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .topbar-left { display: flex; align-items: center; gap: 14px; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--blue), var(--teal)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 3px 12px rgba(30,144,255,0.35); }
+    .brand-mark svg { width: 19px; height: 19px; }
+    .topbar-logo { font-family: var(--font-display); font-size: 17px; font-weight: 800; letter-spacing: -0.01em; background: linear-gradient(135deg, var(--blue-light), var(--purple-light)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .topbar-subject { font-size: 11px; font-weight: 700; color: var(--teal); text-transform: uppercase; letter-spacing: 0.06em; background: rgba(14,158,143,0.1); border: 1px solid rgba(14,158,143,0.25); border-radius: 20px; padding: 3px 11px; }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+    .user-name { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
+    .btn-sm { padding: 7px 13px; border-radius: 9px; font-family: 'Heebo', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-back { background: transparent; border: 1px solid rgba(27,42,61,0.14); color: var(--muted); }
+    .btn-back:hover { border-color: var(--blue); color: var(--blue-light); }
+    .btn-logout { background: transparent; border: 1px solid rgba(27,42,61,0.14); color: var(--muted); }
+    .btn-logout:hover { border-color: var(--error); color: var(--error); }
+    .btn-primary { background: linear-gradient(135deg, var(--blue), var(--teal)); color: white; box-shadow: 0 3px 12px rgba(30,144,255,0.25); }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-success { background: rgba(18,166,110,0.15); color: var(--success); border: 1px solid rgba(18,166,110,0.3); }
+    .btn-warning { background: rgba(255,122,61,0.15); color: var(--warning); border: 1px solid rgba(255,122,61,0.3); }
+    .btn-danger  { background: rgba(229,72,77,0.15); color: var(--error); border: 1px solid rgba(229,72,77,0.3); }
+
+    .main { max-width: 1200px; margin: 0 auto; padding: 26px 24px; }
+
+    /* STATS */
+    .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+    .stat-card { position: relative; background: linear-gradient(160deg, var(--dark3), var(--dark2) 80%); border: 1px solid rgba(27,42,61,0.07); border-radius: 14px; padding: 16px 18px; overflow: hidden; }
+    .stat-card::before { content: ''; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; width: 4px; background: linear-gradient(180deg, var(--teal), var(--blue)); }
+    .stat-num { font-family: var(--font-display); font-size: 27px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    /* TABS */
+    .tabs-row { display: flex; gap: 4px; margin-bottom: 20px; background: var(--dark2); border-radius: 13px; padding: 4px; border: 1px solid rgba(27,42,61,0.07); width: fit-content; }
+    .tab-btn { padding: 9px 20px; border: none; border-radius: 10px; background: transparent; color: var(--muted); font-family: var(--font-display); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .tab-btn.active { background: linear-gradient(135deg, var(--teal), var(--blue)); color: white; font-weight: 700; box-shadow: 0 2px 10px rgba(14,158,143,0.3); }
+
+    .screen { display: none; }
+    .screen.show { display: block; }
+
+    /* GROUPS TABLE */
+    .card { background: linear-gradient(160deg, rgba(255,239,217,0.9), rgba(255,255,255,0.9)); border: 1px solid rgba(27,42,61,0.07); border-radius: 18px; padding: 20px; margin-bottom: 16px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    .card-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; }
+    .search-input { padding: 8px 13px; background: var(--dark3); border: 1px solid rgba(27,42,61,0.08); border-radius: 9px; color: var(--text); font-family: 'Heebo', sans-serif; font-size: 13px; outline: none; width: 200px; direction: rtl; }
+
+    .table-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid rgba(27,42,61,0.07); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { padding: 11px 14px; text-align: right; background: var(--dark3); color: var(--muted); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(27,42,61,0.07); white-space: nowrap; }
+    td { padding: 13px 14px; border-bottom: 1px solid rgba(27,42,61,0.04); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(30,144,255,0.03); }
+
+    /* MEMBERS */
+    .members-wrap { display: flex; flex-direction: column; gap: 2px; }
+    .member-email { font-size: 12px; color: var(--muted); }
+
+    /* PROGRESS BAR */
+    .prog-wrap { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+    .prog-bar { flex: 1; height: 7px; background: var(--dark4); border-radius: 4px; overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--teal), var(--blue)); box-shadow: 0 0 8px rgba(30,144,255,0.4); }
+    .prog-pct { font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--teal); min-width: 30px; }
+
+    /* CONTRIBUTION PILLS */
+    .contrib-wrap { display: flex; gap: 4px; flex-wrap: wrap; }
+    .contrib-pill { font-size: 10px; padding: 3px 8px; border-radius: 20px; font-weight: 600; white-space: nowrap; }
+    .pill-member { background: rgba(30,144,255,0.15); color: var(--blue-light); }
+    .pill-pair   { background: rgba(139,92,246,0.15); color: var(--purple-light); }
+
+    /* LAST ACTIVE */
+    .la-recent { color: var(--success); font-size: 12px; }
+    .la-mid    { color: var(--warning); font-size: 12px; }
+    .la-old    { color: var(--error); font-size: 12px; }
+    .la-none   { color: var(--muted); font-size: 12px; }
+
+    /* SECTION CELLS — כל נקודה היא "חותמת דרכון" זעירה */
+    .sections-mini { display: flex; gap: 3px; }
+    .sec-dot { width: 15px; height: 15px; border-radius: 50%; font-size: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; border: 1.5px solid transparent; }
+    .sec-dot.done { background: rgba(242,169,0,0.18); color: var(--gold); border-color: rgba(242,169,0,0.4); }
+    .sec-dot.empty { background: var(--dark4); color: var(--muted); }
+    .sec-dot.current { background: rgba(30,144,255,0.2); color: var(--blue-light); border-color: rgba(30,144,255,0.5); }
+
+    /* BADGE */
+    .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-success { background: rgba(18,166,110,0.15); color: var(--success); border: 1px solid rgba(18,166,110,0.3); }
+    .badge-warning { background: rgba(255,122,61,0.15); color: var(--warning); border: 1px solid rgba(255,122,61,0.3); }
+    .badge-error   { background: rgba(229,72,77,0.15); color: var(--error); border: 1px solid rgba(229,72,77,0.3); }
+    .badge-blue    { background: rgba(30,144,255,0.15); color: var(--blue-light); border: 1px solid rgba(30,144,255,0.3); }
+
+    /* UNITS — כרטיס כרטיס-עלייה קטן */
+    .units-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+    .unit-card { position: relative; background: linear-gradient(160deg, var(--dark3), var(--dark2) 80%); border: 1px solid rgba(27,42,61,0.07); border-radius: 14px; padding: 16px 18px; transition: all 0.2s; overflow: hidden; }
+    .unit-card::before { content: ''; position: absolute; inset-inline-start: 0; top: 0; bottom: 0; width: 4px; background: var(--dark4); transition: background 0.2s; }
+    .unit-card.open::before { background: linear-gradient(180deg, var(--teal), var(--blue)); }
+    .unit-card.open { border-color: rgba(14,158,143,0.3); }
+    .unit-name { font-family: var(--font-display); font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .unit-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .unit-toggle { display: flex; align-items: center; justify-content: space-between; }
+    .toggle-switch { position: relative; width: 44px; height: 24px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--dark4); border-radius: 12px; cursor: pointer; transition: 0.3s; }
+    .toggle-slider:before { content: ''; position: absolute; width: 18px; height: 18px; right: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+    input:checked + .toggle-slider { background: var(--success); }
+
+    /* FINDINGS — ממצאים לתוצר, מקובצים לפי פרק */
+    .findings-section-group { margin-bottom: 22px; }
+    .findings-section-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(27,42,61,0.08); }
+    .finding-card { background: var(--dark3); border: 1px solid rgba(27,42,61,0.08); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+    .finding-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px; }
+    .finding-card-source { font-size: 12px; color: var(--muted); }
+    .finding-card-content { font-size: 13px; line-height: 1.6; white-space: pre-wrap; margin-bottom: 10px; }
+    .finding-card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .finding-note-input { flex: 1; min-width: 160px; padding: 7px 10px; background: var(--dark2); border: 1px solid rgba(27,42,61,0.1); border-radius: 8px; color: var(--text); font-family: 'Heebo', sans-serif; font-size: 12px; }
+    .finding-teacher-note { font-size: 12px; color: var(--warning); margin-top: 6px; }
+    input:checked + .toggle-slider:before { transform: translateX(-20px); }
+
+    /* ADD GROUP FORM */
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .form-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    input[type=text], input[type=email], select, textarea { width: 100%; padding: 10px 13px; background: rgba(255,255,255,0.6); border: 1px solid rgba(27,42,61,0.08); border-radius: 10px; color: var(--text); font-family: 'Heebo', sans-serif; font-size: 13px; outline: none; direction: rtl; transition: all 0.2s; }
+    textarea { resize: vertical; min-height: 60px; }
+    input:focus, select:focus, textarea:focus { border-color: rgba(14,158,143,0.5); background: rgba(255,255,255,0.9); }
+
+    /* MODAL */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(4,10,18,0.8); backdrop-filter: blur(3px); z-index: 200; display: none; align-items: center; justify-content: center; padding: 24px; }
+    .modal-overlay.show { display: flex; }
+    .modal { background: var(--dark2); border: 1px solid rgba(27,42,61,0.1); border-radius: 22px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; animation: fadeUp 0.2s ease; box-shadow: 0 30px 80px rgba(0,0,0,0.6); }
+    .modal-wide { max-width: 920px; }
+    .edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 720px) { .edit-grid { grid-template-columns: 1fr; } }
+    .preview-pane { background: var(--dark); border: 1px solid rgba(27,42,61,0.07); border-radius: 16px; padding: 16px; }
+    .preview-label { font-family: var(--font-display); font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+    .preview-card { background: var(--dark3); border-radius: 14px; padding: 16px; }
+    .preview-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+    .preview-image { width: 100%; border-radius: 12px; margin-bottom: 10px; max-height: 160px; object-fit: cover; display: none; }
+    .preview-embed-wrap { position: relative; width: 100%; padding-top: 56.25%; margin-bottom: 10px; border-radius: 12px; overflow: hidden; display: none; background: #000; }
+    .preview-embed-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+    .preview-summary { font-size: 13px; line-height: 1.7; margin-bottom: 10px; }
+    .preview-assignment { font-size: 12px; color: var(--muted); line-height: 1.6; background: var(--dark2); border-radius: 9px; padding: 10px 12px; }
+    .form-hint2 { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-title { font-family: var(--font-display); font-size: 18px; font-weight: 800; margin-bottom: 20px; }
+    .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .btn-modal-cancel { padding: 9px 16px; background: transparent; border: 1px solid rgba(27,42,61,0.15); border-radius: 10px; color: var(--muted); font-family: 'Heebo', sans-serif; font-size: 13px; cursor: pointer; }
+    .btn-modal-confirm { padding: 9px 16px; background: linear-gradient(135deg, var(--teal), var(--blue)); border: none; border-radius: 10px; color: white; font-family: 'Heebo', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 3px 12px rgba(14,158,143,0.3); }
+    .btn-modal-confirm:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+    /* MEMBERS EDITOR (in modal) */
+    .member-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: var(--dark3); border-radius: 9px; margin-bottom: 6px; }
+    .member-row-email { font-size: 12px; }
+    .member-remove { background: transparent; border: none; color: var(--error); cursor: pointer; font-size: 13px; }
+    .add-member-row { display: flex; gap: 6px; margin-top: 8px; }
+    .add-member-row input { flex: 1; }
+    .add-member-row button { padding: 8px 14px; background: linear-gradient(135deg, var(--teal), var(--blue)); border: none; border-radius: 9px; color: white; font-family: 'Heebo', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+
+    /* SECTIONS DETAIL */
+    .sections-detail { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+    .sec-detail { background: var(--dark3); border-radius: 10px; padding: 10px; text-align: center; border: 1px solid rgba(27,42,61,0.06); }
+    .sec-detail.done { border-color: rgba(242,169,0,0.35); background: rgba(242,169,0,0.06); }
+    .sec-detail-num { font-size: 10px; color: var(--muted); }
+    .sec-detail-icon { font-size: 18px; margin: 4px 0; }
+    .sec-detail-name { font-size: 10px; color: var(--muted); }
+
+    /* עריכת בלוקים ביחידה */
+    .block-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--dark3); border-radius: 11px; margin-bottom: 8px; }
+    .block-type-badge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+    .block-type-badge.teach    { background: rgba(30,144,255,0.15); color: var(--blue-light); }
+    .block-type-badge.game     { background: rgba(14,158,143,0.15); color: var(--teal); }
+    .block-type-badge.question { background: rgba(139,92,246,0.15); color: var(--purple-light); }
+    .block-type-badge.quiz     { background: rgba(18,166,110,0.15); color: var(--success); }
+    .block-type-badge.question_structured { background: rgba(255,122,61,0.15); color: var(--warning); }
+    .block-row-title { flex: 1; font-size: 13px; font-weight: 600; }
+    .block-row-actions { display: flex; gap: 4px; }
+    .block-row-actions button { background: transparent; border: 1px solid rgba(27,42,61,0.1); color: var(--muted); border-radius: 7px; padding: 4px 8px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+    .block-row-actions button:hover { color: var(--text); border-color: rgba(27,42,61,0.3); }
+    .block-form-section { display: none; }
+    .block-form-section.show { display: block; }
+    .form-hint3 { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+
+    /* תשובות מהיחידות + יומן צ'אט (בתוך מודל הקבוצה) */
+    .group-subsection { margin-top: 16px; }
+    .group-subsection-title { font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+    .lanswer-card { background: var(--dark3); border-radius: 11px; padding: 12px; margin-bottom: 8px; border-inline-start: 3px solid var(--gold); }
+    .lanswer-source { font-size: 11px; color: var(--blue-light); font-weight: 700; margin-bottom: 4px; }
+    .lanswer-question { font-size: 12px; color: var(--muted); margin-bottom: 6px; line-height: 1.5; }
+    .lanswer-text { font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+    .chatlog-wrap { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 4px; }
+    .chatlog-msg { padding: 8px 12px; border-radius: 11px; font-size: 12px; line-height: 1.5; max-width: 85%; }
+    .chatlog-msg.student { background: rgba(30,144,255,0.16); align-self: flex-end; }
+    .chatlog-msg.bot { background: var(--dark3); align-self: flex-start; }
+    .chatlog-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+    .loading-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(27,42,61,0.15); border-top-color: var(--teal); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty-state { padding: 30px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    @media (max-width: 768px) {
+      .stats-row { grid-template-columns: repeat(3, 1fr); }
+      .main { padding: 14px; }
+      .topbar { padding: 0 14px; }
+      .sections-detail { grid-template-columns: repeat(2, 1fr); }
+      .modal { padding: 20px; }
+    }
+
+    /* מצב מצגת (הקרנה בכיתה) */
+    .present-overlay { position: fixed; inset: 0; background: var(--dark); z-index: 500; display: none; flex-direction: column;
+      background-image: radial-gradient(ellipse 1000px 600px at 100% 0%, rgba(30,144,255,0.08), transparent 60%), radial-gradient(circle, rgba(27,42,61,0.03) 1px, transparent 1px);
+      background-size: auto, 26px 26px;
+    }
+    .present-overlay.show { display: flex; }
+    .present-topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; border-bottom: 1px solid rgba(27,42,61,0.08); flex-shrink: 0; }
+    .present-topbar-title { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--muted); }
+    .present-topbar-actions { display: flex; gap: 8px; }
+    .present-stage { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; overflow-y: auto; }
+    .present-slide { max-width: 880px; width: 100%; }
+    .present-slide-title { font-family: var(--font-display); font-size: 34px; font-weight: 800; margin-bottom: 24px; text-align: center; text-wrap: balance; }
+    .present-slide-body { font-size: 22px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+    .present-slide-media img { width: 100%; border-radius: 16px; margin-bottom: 20px; max-height: 380px; object-fit: cover; }
+    .present-slide-media .present-embed { position: relative; width: 100%; padding-top: 56.25%; margin-bottom: 20px; border-radius: 16px; overflow: hidden; background: #000; }
+    .present-slide-media .present-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+    .present-question-tag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--purple-light); background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.3); border-radius: 20px; padding: 4px 12px; margin-bottom: 16px; }
+    .present-bottombar { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; border-top: 1px solid rgba(27,42,61,0.08); flex-shrink: 0; }
+    .present-nav-btn { padding: 12px 26px; border-radius: 12px; font-family: 'Heebo', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; border: none; background: var(--dark3); color: var(--text); transition: all 0.2s; }
+    .present-nav-btn:not(:disabled):hover { background: var(--dark4); }
+    .present-nav-btn:disabled { opacity: 0.35; cursor: default; }
+    .present-counter { font-family: var(--font-display); font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* בסיס המשחקים (זיכרון/כרטיסיות) — משמש במצב מצגת */
+    .game-mount { min-height: 40px; }
+    .memory-progress, .fc-progress { font-size: 12px; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+    .game-reset-btn { background: transparent; border: 1px solid rgba(27,42,61,0.15); color: var(--muted); border-radius: 20px; padding: 4px 11px; font-family: 'Heebo', sans-serif; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+    .game-reset-btn:hover { color: var(--text); border-color: rgba(27,42,61,0.35); }
+    .memory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+    .memory-tile { background: var(--dark3); border: 1px solid rgba(27,42,61,0.1); border-radius: 10px; padding: 12px 8px; font-size: 11px; text-align: center; cursor: pointer; min-height: 56px; display: flex; align-items: center; justify-content: center; line-height: 1.4; transition: all 0.15s; }
+    .memory-tile.open { background: rgba(30,144,255,0.16); border-color: rgba(30,144,255,0.45); }
+    .memory-tile.matched { background: rgba(18,166,110,0.16); border-color: rgba(18,166,110,0.45); opacity: 0.75; cursor: default; }
+    .memory-win { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--success); }
+    .fc-card { background: var(--dark3); border: 1px solid rgba(27,42,61,0.1); border-radius: 14px; padding: 24px 16px; min-height: 90px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .fc-face { display: none; line-height: 1.5; }
+    .fc-card:not(.flipped) .fc-front { display: block; }
+    .fc-card.flipped .fc-back { display: block; color: var(--teal); }
+    .fc-hint { text-align: center; font-size: 11px; color: var(--muted); margin-top: 6px; }
+    .fc-controls { display: flex; justify-content: space-between; margin-top: 10px; }
+    .btn-nav { padding: 11px 20px; border-radius: 10px; font-family: 'Heebo', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-prev { background: var(--dark3); color: var(--muted); }
+    .btn-next { background: linear-gradient(135deg, var(--teal), var(--blue)); color: white; }
+
+    /* מילון מושגים — סימון + הסבר בריחוף (זהה ל-student.html) */
+    .gloss-wrap { position: relative; }
+    .gloss-icon { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin: 0 3px; border-radius: 50%; background: rgba(30,144,255,0.22); color: var(--blue-light); font-size: 10px; font-style: normal; cursor: help; position: relative; vertical-align: middle; }
+    .gloss-tip { display: none; position: absolute; bottom: calc(100% + 8px); right: 50%; transform: translateX(50%); width: max-content; max-width: 240px; background: var(--dark4); border: 1px solid rgba(27,42,61,0.15); border-radius: 10px; padding: 9px 12px; font-size: 12px; font-weight: 400; color: var(--text); line-height: 1.5; box-shadow: 0 10px 26px rgba(0,0,0,0.45); z-index: 50; white-space: normal; text-align: right; }
+    .gloss-icon:hover .gloss-tip, .gloss-icon:focus .gloss-tip { display: block; }
+
+    /* משחקים במצב מצגת — גרסה מוגדלת */
+    .present-slide .memory-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+    .present-slide .memory-tile { min-height: 90px; font-size: 15px; padding: 16px 10px; }
+    .present-slide .fc-card { min-height: 160px; font-size: 22px; padding: 40px 24px; }
+    .present-slide .memory-progress, .present-slide .fc-progress { font-size: 15px; }
+    .present-slide .gloss-tip { font-size: 14px; max-width: 320px; }
+
+    /* ===== מיקרו-אינטראקציות: פידבק מיידי בלחיצה (מסקנת המועצה) ===== */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+    button, .btn-sm, .btn-back, .btn-logout, .btn-primary, .btn-success, .btn-warning, .btn-danger,
+    .btn-nav, .btn-prev, .btn-next, .tab-btn, .btn-modal-cancel, .btn-modal-confirm,
+    .game-reset-btn, .present-nav-btn, .block-row-actions button, .add-member-row button,
+    .member-remove, .toggle-slider {
+      transition: transform 0.15s cubic-bezier(.34,1.2,.64,1), box-shadow 0.15s ease, filter 0.15s ease;
+    }
+    button:not(:disabled):active, .btn-sm:active, .btn-back:active, .btn-logout:active,
+    .btn-primary:active, .btn-success:active, .btn-warning:active, .btn-danger:active,
+    .btn-nav:not(:disabled):active, .tab-btn:active, .btn-modal-cancel:active, .btn-modal-confirm:active,
+    .game-reset-btn:active, .present-nav-btn:not(:disabled):active,
+    .block-row-actions button:active, .member-remove:active {
+      transform: scale(0.95);
+    }
+    .unit-card, .stat-card, .lanswer-card { transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.2s ease; }
+    .unit-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.3); }
+    tr { transition: background 0.15s ease; }
+    .fc-card { transition: transform 0.15s ease; }
+    .fc-card:active { transform: scale(0.98); }
+    .memory-tile { transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease; }
+    .memory-tile:not(.matched):active { transform: scale(0.93); }
+    input[type=text], input[type=email], select, textarea {
+      transition: transform 0.1s ease, border-color 0.2s ease, background 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2.5 13.5L21 4L14 20.5L11.2 12.8L2.5 13.5Z" fill="white" fill-opacity="0.92"/></svg>
+    </div>
+    <div class="topbar-logo">כיתה פלוס</div>
+    <div class="topbar-subject">🗺️ תיירות דיגיטלית</div>
+  </div>
+  <div class="topbar-right">
+    <div class="user-name" id="userName">טוען...</div>
+    <button class="btn-sm btn-back" onclick="goBack()">← דשבורד</button>
+    <button class="btn-sm btn-logout" onclick="logout()">יציאה</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-num" style="color:var(--blue-light)" id="stGroups">—</div><div class="stat-label">קבוצות</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--teal)" id="stAvg">—</div><div class="stat-label">התקדמות ממוצעת</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--success)" id="stDone">—</div><div class="stat-label">סיימו</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--warning)" id="stInProgress">—</div><div class="stat-label">בתהליך</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--error)" id="stStuck">—</div><div class="stat-label">תקועים</div></div>
+  </div>
+
+  <div id="continueGroupBar"></div>
+
+  <div class="tabs-row">
+    <button class="tab-btn" onclick="switchTab('groups', this)">קבוצות</button>
+    <button class="tab-btn" onclick="switchTab('classes', this)">כיתות</button>
+    <button class="tab-btn active" onclick="switchTab('units', this)">יחידות לימוד</button>
+    <button class="tab-btn" onclick="switchTab('findings', this)">ממצאים לתוצר <span id="findingsPendingBadge"></span></button>
+  </div>
+
+  <!-- קבוצות -->
+  <div class="screen" id="tab-groups">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">כל הקבוצות</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="search-input" type="text" placeholder="חיפוש..." oninput="filterGroups(this.value)" />
+          <select id="filterStatus" style="width:120px;padding:7px 10px;" onchange="filterGroups(document.querySelector('.search-input').value)">
+            <option value="">כולם</option>
+            <option value="active">פעילים</option>
+            <option value="stuck">תקועים</option>
+            <option value="done">סיימו</option>
+          </select>
+          <button class="btn-sm" onclick="openBulkImportModal()">📊 ייבוא מאקסל</button>
+          <button class="btn-sm btn-primary" onclick="openAddGroupModal()">+ הוסף קבוצה</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>קבוצה</th>
+              <th>אתר</th>
+              <th>חברים</th>
+              <th>סעיפים</th>
+              <th>התקדמות</th>
+              <th>תרומה</th>
+              <th>פעילות</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="groupsBody">
+            <tr><td colspan="8" class="empty-state"><span class="loading-spinner"></span> טוען...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- יחידות -->
+  <div class="screen show" id="tab-units">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">יחידות לימוד</div>
+        <button class="btn-sm btn-primary" onclick="showModal('addUnitModal')">+ יחידה חדשה</button>
+      </div>
+      <div class="units-grid" id="unitsGrid">
+        <div class="empty-state">טוען יחידות...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ממצאים לתוצר -->
+  <div class="screen" id="tab-findings">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">ממצאים ממתינים לאישור</div>
+        <div style="font-size:12px;color:var(--muted);">תשובות-תוצר של הקבוצות שלך, מקובצות לפי פרק בתוצר</div>
+      </div>
+      <div id="findingsBody">
+        <div class="empty-state">טוען...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- כיתות -->
+  <div class="screen" id="tab-classes">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">כיתות</div>
+        <button class="btn-sm btn-primary" onclick="openAddClassModal()">+ כיתה חדשה</button>
+      </div>
+      <div id="classesBody">
+        <div class="empty-state">טוען...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- מודל פרטי קבוצה -->
+<div class="modal-overlay" id="groupModal">
+  <div class="modal">
+    <div class="modal-title" id="groupModalTitle">פרטי קבוצה</div>
+    <div id="groupModalContent"></div>
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('groupModal')">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- מודל קבוצה חדשה -->
+<div class="modal-overlay" id="addGroupModal">
+  <div class="modal">
+    <div class="modal-title">קבוצה חדשה</div>
+    <div class="form-group"><label>שם הקבוצה</label><input type="text" id="groupName" placeholder="לדוגמה: דנה ויוסי, או הכותל המערבי" /></div>
+    <div class="form-group">
+      <label>מיילים של חברי הקבוצה</label>
+      <textarea id="groupMembers" placeholder="student1@gmail.com, student2@gmail.com"></textarea>
+      <div class="form-hint">אפשר תלמיד יחיד, זוג, או קבוצה גדולה יותר — מייל אחד או יותר, מופרדים בפסיק.</div>
+    </div>
+    <div class="form-group">
+      <label>כיתה</label>
+      <select id="groupClass"><option value="">ללא כיתה</option></select>
+      <div class="form-hint">אם הכיתה שלכם לא ברשימה, אפשר להוסיף אותה בטאב "כיתות".</div>
+    </div>
+    <div id="addGroupResult" style="margin-bottom:8px;font-size:13px;"></div>
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('addGroupModal')">ביטול</button>
+      <button class="btn-modal-confirm" id="addGroupConfirmBtn" onclick="addGroup()">צור קבוצה</button>
+    </div>
+  </div>
+</div>
+
+<!-- מודל ייבוא קבוצות מאקסל -->
+<div class="modal-overlay" id="bulkImportModal">
+  <div class="modal">
+    <div class="modal-title">ייבוא קבוצות מאקסל</div>
+    <div class="form-hint" style="margin-bottom:10px;">
+      שלב 1: הורידו את הטופס, מלאו שורה אחת לכל תלמיד/ה (מחקו את שורות הדוגמה).<br>
+      שלב 2: העלו את הקובץ המלא בחזרה — המערכת תיצור אוטומטית כיתות וקבוצות חדשות.
+    </div>
+    <button class="btn-sm" style="margin-bottom:14px;" onclick="downloadGroupsTemplate()">📥 הורדת טופס ריק</button>
+
+    <div class="form-group">
+      <label>העלאת הטופס המלא</label>
+      <input type="file" id="bulkImportFile" accept=".xlsx,.xls" onchange="onBulkImportFileSelected(this)" />
+    </div>
+
+    <div id="bulkImportPreview"></div>
+    <div id="bulkImportResult" style="margin-bottom:8px;font-size:13px;"></div>
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('bulkImportModal')">סגור</button>
+      <button class="btn-modal-confirm" id="bulkImportConfirmBtn" style="display:none;" onclick="confirmBulkImport()">צור קבוצות</button>
+    </div>
+  </div>
+</div>
+
+<!-- מודל כיתה חדשה / עריכה -->
+<div class="modal-overlay" id="addClassModal">
+  <div class="modal">
+    <input type="hidden" id="editClassId" />
+    <div class="modal-title" id="classModalTitle">כיתה חדשה</div>
+    <div class="form-group"><label>שם הכיתה</label><input type="text" id="className" placeholder="י1" /></div>
+    <div id="addClassResult" style="margin-bottom:8px;font-size:13px;"></div>
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('addClassModal')">ביטול</button>
+      <button class="btn-modal-confirm" id="saveClassConfirmBtn" onclick="saveClass()">שמור</button>
+    </div>
+  </div>
+</div>
+
+<!-- מודל יחידה חדשה -->
+<div class="modal-overlay" id="addUnitModal">
+  <div class="modal">
+    <div class="modal-title">יחידה חדשה</div>
+    <div class="form-group"><label>שם היחידה</label><input type="text" id="unitName" placeholder="רשתות חברתיות" /></div>
+    <div class="form-group">
+      <label>סעיף מקושר</label>
+      <select id="unitSection">
+        <option value="1">סעיף 1 — פרטי האתר</option>
+        <option value="2">סעיף 2 — תיאור כללי</option>
+        <option value="3">סעיף 3 — נוכחות דיגיטלית</option>
+        <option value="4">סעיף 4 — מושגים</option>
+        <option value="5">סעיף 5 — חוויית משתמש</option>
+        <option value="6">סעיף 6 — עוצמות</option>
+        <option value="7">סעיף 7 — הצעות לשיפור</option>
+        <option value="8">סעיף 8 — סיכום אישי</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>מצב</label>
+      <select id="unitOpenNow">
+        <option value="false">סגור — אפתח ידנית</option>
+        <option value="true">פתוח עכשיו</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('addUnitModal')">ביטול</button>
+      <button class="btn-modal-confirm" onclick="createUnit()">צור יחידה</button>
+    </div>
+  </div>
+</div>
+
+<!-- מודל עריכת יחידה -->
+<div class="modal-overlay" id="editUnitModal">
+  <div class="modal modal-wide">
+    <div class="modal-title">עריכת יחידה</div>
+    <input type="hidden" id="editUnitId" />
+    <div class="edit-grid">
+
+      <div>
+        <div class="form-group"><label>שם היחידה</label><input type="text" id="editUnitName" oninput="renderLivePreview()" /></div>
+        <div class="form-group">
+          <label>סעיף מקושר</label>
+          <select id="editUnitSection" onchange="renderLivePreview()">
+            <option value="1">סעיף 1 — פרטי האתר</option>
+            <option value="2">סעיף 2 — תיאור כללי</option>
+            <option value="3">סעיף 3 — נוכחות דיגיטלית</option>
+            <option value="4">סעיף 4 — מושגים</option>
+            <option value="5">סעיף 5 — חוויית משתמש</option>
+            <option value="6">סעיף 6 — עוצמות</option>
+            <option value="7">סעיף 7 — הצעות לשיפור</option>
+            <option value="8">סעיף 8 — סיכום אישי</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>חודש מתוכנן ללימוד</label>
+          <select id="editUnitMonth">
+            <option value="">— לא נקבע —</option>
+            <option value="ספטמבר">ספטמבר</option>
+            <option value="אוקטובר">אוקטובר</option>
+            <option value="נובמבר">נובמבר</option>
+            <option value="דצמבר">דצמבר</option>
+            <option value="ינואר">ינואר</option>
+            <option value="פברואר">פברואר</option>
+            <option value="מרץ">מרץ</option>
+            <option value="אפריל">אפריל</option>
+            <option value="מאי">מאי</option>
+            <option value="יוני">יוני</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>קישור לתמונה</label>
+          <input type="text" id="editUnitImage" placeholder="https://..." oninput="renderLivePreview()" />
+          <div class="form-hint2">קישור ישיר לתמונה (למשל מ-Google Drive עם שיתוף "כל מי שיש לו קישור", או כל אתר תמונות).</div>
+        </div>
+        <div class="form-group">
+          <label>הטמעת מצגת / סרטון</label>
+          <input type="text" id="editUnitEmbed" placeholder="https://..." oninput="renderLivePreview()" />
+          <div class="form-hint2">קישור "הטמעה" (Embed) — מ-YouTube: שתף ← הטמע ← העתק את הקישור מתוך ה-src. מ-Google Slides: קובץ ← פרסום לאינטרנט ← הטמע. מ-Canva: שתף ← הטמע.</div>
+        </div>
+        <div class="form-group"><label>תקציר (מה התלמיד יראה)</label><textarea id="editUnitSummary" rows="5" oninput="renderLivePreview()"></textarea></div>
+        <div class="form-group"><label>תקציר המטלה</label><textarea id="editUnitAssignment" rows="4" oninput="renderLivePreview()"></textarea></div>
+      </div>
+
+      <div class="preview-pane">
+        <div class="preview-label">👁️ כך זה ייראה לתלמיד</div>
+        <div class="preview-card">
+          <div class="preview-name" id="previewName"></div>
+          <img class="preview-image" id="previewImage" />
+          <div class="preview-embed-wrap" id="previewEmbedWrap"><iframe id="previewEmbedFrame"></iframe></div>
+          <div class="preview-summary" id="previewSummary"></div>
+          <div class="preview-assignment" id="previewAssignment"></div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('editUnitModal')">ביטול</button>
+      <button class="btn-modal-confirm" onclick="saveEditedUnit()">שמור</button>
+    </div>
+  </div>
+</div>
+
+<!-- מודל ניהול בלוקים ביחידה -->
+<div class="modal-overlay" id="blocksModal">
+  <div class="modal modal-wide">
+    <div class="modal-title" id="blocksModalTitle">בלוקים ביחידה</div>
+    <input type="hidden" id="blocksUnitIdx" />
+
+    <div id="blocksListSection">
+      <div id="blocksList"></div>
+      <button class="btn-sm btn-primary" style="margin-top:10px;" onclick="openBlockForm(null)">+ בלוק חדש</button>
+    </div>
+
+    <div id="blockFormSection" style="display:none;">
+      <input type="hidden" id="editBlockId" />
+      <div class="form-group">
+        <label>סוג בלוק</label>
+        <select id="blockType" onchange="renderBlockFormFields()">
+          <option value="teach">📖 הוראה</option>
+          <option value="game">🎮 משחק תרגול</option>
+          <option value="question">🎯 שאלה אישית</option>
+          <option value="quiz">✅ בדיקת הבנה קצרה</option>
+          <option value="question_structured">📝 שאלה אישית מובנית</option>
+        </select>
+      </div>
+      <div class="form-group"><label>כותרת</label><input type="text" id="blockTitle" /></div>
+
+      <div id="fieldsTeach" class="block-form-section">
+        <div class="form-group"><label>תוכן ההסבר</label><textarea id="blockBody" rows="6"></textarea></div>
+        <div class="form-group">
+          <label>מדיה</label>
+          <select id="blockMediaType">
+            <option value="">ללא מדיה</option>
+            <option value="image">תמונה</option>
+            <option value="video">וידאו / הטמעה</option>
+          </select>
+        </div>
+        <div class="form-group"><label>קישור מדיה</label><input type="text" id="blockMediaUrl" placeholder="https://..." /></div>
+      </div>
+
+      <div id="fieldsGame" class="block-form-section">
+        <div class="form-group">
+          <label>סוג משחק</label>
+          <select id="blockGameType">
+            <option value="memory">משחק זיכרון</option>
+            <option value="flashcards">כרטיסיות</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>זוגות (מושג | הסבר) — שורה לכל זוג</label>
+          <textarea id="blockGamePairs" rows="6" placeholder="מושג ראשון | הסבר קצר&#10;מושג שני | הסבר קצר"></textarea>
+          <div class="form-hint3">כל שורה: מושג, אחריו סימן | ואז ההסבר/דוגמה. לפחות 3 זוגות מומלץ.</div>
+        </div>
+        <div class="form-group">
+          <label>משוב בהתאמה נכונה (אופציונלי)</label>
+          <input type="text" id="blockGameFeedbackCorrect" placeholder="נכון! הדוגמה מתאימה לקטגוריה." />
+        </div>
+        <div class="form-group">
+          <label>משוב בהתאמה שגויה (אופציונלי)</label>
+          <input type="text" id="blockGameFeedbackIncorrect" placeholder="כמעט. נסו שוב." />
+        </div>
+      </div>
+
+      <div id="fieldsQuestion" class="block-form-section">
+        <div class="form-group"><label>נוסח השאלה</label><textarea id="blockQuestionPrompt" rows="3"></textarea></div>
+        <div class="form-group">
+          <label>סוג תשובה</label>
+          <select id="blockAnswerScope">
+            <option value="learning">תשובת למידה — נשמרת ומנוקדת, לא מיוצאת לתוצר</option>
+            <option value="project">תשובת תוצר — מיוצאת לסעיף בתוצר אחרי אישור מורה</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>לאיזה שדה בפרויקט זה מתחבר</label>
+          <select id="blockTargetField"></select>
+          <div class="form-hint3">התשובה של הקבוצה תוצג בעמוד הסעיף הזה, לצד השדות הרגילים. אם "תשובת תוצר" נבחר למעלה, זה גם קובע לאיזה פרק היא תיכנס בממצאים.</div>
+        </div>
+      </div>
+
+      <div id="fieldsQuiz" class="block-form-section">
+        <div class="form-group">
+          <label>סוג השאלה</label>
+          <select id="blockQuizMode" onchange="renderQuizModeFields()">
+            <option value="select">בחירה מרובה (סמנו את הנכונות)</option>
+            <option value="classify">מיון לקטגוריות</option>
+          </select>
+        </div>
+        <div class="form-group"><label>נוסח השאלה (תרחיש)</label><textarea id="blockQuizPrompt" rows="3"></textarea></div>
+
+        <div id="quizModeSelect">
+          <div class="form-group">
+            <label>אפשרויות בחירה — שורה לכל אפשרות</label>
+            <textarea id="blockQuizOptions" rows="5" placeholder="אפשרות ראשונה&#10;אפשרות שנייה"></textarea>
+          </div>
+          <div class="form-group">
+            <label>מספרי האפשרויות הנכונות (מופרד בפסיקים, החל מ-1)</label>
+            <input type="text" id="blockQuizCorrect" placeholder="לדוגמה: 1,3,4" />
+          </div>
+        </div>
+
+        <div id="quizModeClassify" style="display:none;">
+          <div class="form-group">
+            <label>קטגוריות — שורה לכל קטגוריה</label>
+            <textarea id="blockQuizCategories" rows="4" placeholder="קטגוריה ראשונה&#10;קטגוריה שנייה"></textarea>
+          </div>
+          <div class="form-group">
+            <label>פריטים למיון (פריט | שם הקטגוריה הנכונה) — שורה לכל פריט</label>
+            <textarea id="blockQuizItems" rows="6" placeholder="חרמון | טבעית&#10;מוזיאון | מעשה ידי אדם"></textarea>
+            <div class="form-hint3">שם הקטגוריה חייב להיות זהה בדיוק לאחת השורות בשדה הקטגוריות למעלה.</div>
+          </div>
+        </div>
+
+        <div class="form-group"><label>משוב בתשובה נכונה</label><input type="text" id="blockQuizFeedbackCorrect" placeholder="נכון!" /></div>
+        <div class="form-group"><label>משוב בתשובה שגויה</label><input type="text" id="blockQuizFeedbackIncorrect" placeholder="כמעט. נסו שוב." /></div>
+        <div class="form-hint3">בדיקה מיידית לתלמיד — לא נשמרת ולא מנוקדת, רק לחיזוק ההבנה.</div>
+      </div>
+
+      <div id="fieldsQuestionStructured" class="block-form-section">
+        <div class="form-group"><label>הקדמה / נוסח השאלה</label><textarea id="blockSQPrompt" rows="3"></textarea></div>
+        <div class="form-group">
+          <label>סוג תשובה</label>
+          <select id="blockSQAnswerScope">
+            <option value="project">תשובת תוצר — מיוצאת לסעיף בתוצר אחרי אישור מורה</option>
+            <option value="learning">תשובת למידה — נשמרת ומנוקדת, לא מיוצאת לתוצר</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>קטגוריות לבחירה מרובה — שורה לכל קטגוריה</label>
+          <textarea id="blockSQCategories" rows="5" placeholder="קטגוריה ראשונה&#10;קטגוריה שנייה"></textarea>
+        </div>
+        <div class="form-group"><label>משפט השלמה</label><input type="text" id="blockSQFillPrompt" placeholder="האתר שבחרנו בולט בתחום __________." /></div>
+        <div class="form-group"><label>תווית שדה הראיה (תיאור מילולי)</label><input type="text" id="blockSQEvidenceLabel" placeholder="תארו את הראיה שמצאתם" /></div>
+        <div class="form-group"><label>תווית שדה קישור/צילום מסך (נפרד מהראיה)</label><input type="text" id="blockSQEvidenceLinkLabel" placeholder="קישור או צילום מסך" /></div>
+        <div class="form-group">
+          <label>שלבי הסבר במילים שלהם — שורה לכל שלב</label>
+          <textarea id="blockSQExplainParts" rows="4" placeholder="מצאנו שהאתר משתמש ב-&#10;הדבר עוזר לתיירים בכך ש-"></textarea>
+        </div>
+        <div class="form-group"><label>תווית שאלת ההערכה (אופציונלי)</label><input type="text" id="blockSQRatingLabel" placeholder="היישום באתר הוא:" /></div>
+        <div class="form-group">
+          <label>אפשרויות הערכה — שורה לכל אפשרות</label>
+          <textarea id="blockSQRatingOptions" rows="3" placeholder="טוב&#10;חלקי&#10;חסר"></textarea>
+        </div>
+        <div class="form-group"><label>תווית נימוק ההערכה</label><input type="text" id="blockSQRatingReasonLabel" placeholder="מפני ש-" /></div>
+        <div class="form-group">
+          <label>צ'קליסט לפני שמירה — שורה לכל פריט</label>
+          <textarea id="blockSQChecklist" rows="4" placeholder="נתנו דוגמה מהאתר שלנו.&#10;צירפנו הוכחה."></textarea>
+        </div>
+        <div class="form-group">
+          <label>לאיזה שדה בפרויקט זה מתחבר</label>
+          <select id="blockSQTargetField"></select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-modal-cancel" onclick="closeBlockForm()">ביטול</button>
+        <button class="btn-modal-confirm" onclick="saveBlockForm()">שמור בלוק</button>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-modal-cancel" onclick="hideModal('blocksModal')">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- מצב מצגת -->
+<div class="present-overlay" id="presentOverlay">
+  <div class="present-topbar">
+    <div class="present-topbar-title" id="presentUnitName"></div>
+    <div class="present-topbar-actions">
+      <button class="btn-sm btn-back" onclick="togglePresentFullscreen()">⛶ מסך מלא</button>
+      <button class="btn-sm btn-back" onclick="closePresentation()">✕ סגור</button>
+    </div>
+  </div>
+  <div class="present-stage">
+    <div class="present-slide" id="presentSlide"></div>
+  </div>
+  <div class="present-bottombar">
+    <button class="present-nav-btn" id="presentPrevBtn" onclick="presentNav(-1)">→ הקודם</button>
+    <div class="present-counter" id="presentCounter"></div>
+    <button class="present-nav-btn" id="presentNextBtn" onclick="presentNav(1)">הבא ←</button>
+  </div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+}
+const TICHER_URL = 'https://nisan1234-afk.github.io/';
+const API_URL    = 'https://script.google.com/macros/s/AKfycbwf3-MNZBBi64zXcNH7wfhBRoEBl9brtQ9QRI4Won5RmUIOrl_WBivN6uI5NAp6Mc0h/exec';
+
+const SECTION_NAMES = ['','פרטי האתר','תיאור כללי','נוכחות דיגיטלית','מושגים','חוויית משתמש','עוצמות','הצעות לשיפור','סיכום אישי'];
+const SECTION_ICONS = ['','📍','📄','📱','📚','🖥️','💪','💡','✍️'];
+
+const FIELDS_BY_SECTION = [
+  null,
+  { name:'פרטי האתר', fields:[{id:'site_basic',label:'פרטי האתר הבסיסיים'},{id:'site_target',label:'קהל יעד'},{id:'site_unique',label:'מה מיוחד באתר?'}] },
+  { name:'תיאור כללי', fields:[{id:'general_history',label:'היסטוריה ורקע'},{id:'general_offer',label:'מה האתר מציע?'}] },
+  { name:'נוכחות דיגיטלית', fields:[{id:'digital_website',label:'אתר האינטרנט'},{id:'digital_social',label:'רשתות חברתיות'},{id:'digital_reviews',label:'ביקורות ודירוגים'}] },
+  { name:'מושגים', fields:[{id:'concepts_list',label:'מושגים רלוונטיים'},{id:'concepts_apply',label:'כיצד מושגים אלו קשורים לאתר?'}] },
+  { name:'חוויית משתמש', fields:[{id:'ux_ease',label:'קלות שימוש'},{id:'ux_design',label:'עיצוב ויזואלי'},{id:'ux_mobile',label:'גרסה מובייל'}] },
+  { name:'עוצמות', fields:[{id:'strengths_main',label:'עוצמות דיגיטליות'},{id:'strengths_example',label:'דוגמה בולטת'}] },
+  { name:'הצעות לשיפור', fields:[{id:'improve_ideas',label:'הצעות לשיפור'},{id:'improve_priority',label:'הצעה מועדפת'},{id:'improve_how',label:'כיצד תיישמו אותה?'}] },
+  { name:'סיכום אישי', fields:[{id:'personal_learned',label:'מה למדתי'},{id:'personal_surprise',label:'מה הפתיע אותי'},{id:'personal_takeaway',label:'מה אני לוקח/ת איתי'}] }
+];
+
+let currentUser = null;
+let allGroups   = [];
+let allUnits    = [];
+let allClasses  = [];
+let currentGroupDetail = null;
+let currentGroupId     = null;
+
+window.onload = async function() {
+  const stored = sessionStorage.getItem('kitahUser');
+  if (!stored) { window.location.href = TICHER_URL; return; }
+  currentUser = JSON.parse(stored);
+  document.getElementById('userName').textContent = currentUser.name || currentUser.email.split('@')[0];
+  await loadData();
+};
+
+async function callAPI(action, params = {}) {
+  const res  = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, token: currentUser.token, ...params }) });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error);
+  return data.data;
+}
+
+async function loadData() {
+  try {
+    const data = await callAPI('getTeacherDashboard');
+    allGroups  = data.groups || [];
+    allUnits   = data.units || [];
+    allClasses = data.classes || [];
+    renderStats();
+    renderGroups(allGroups);
+    renderUnits();
+    renderClasses();
+    renderContinueGroupBar();
+  } catch(e) {
+    document.getElementById('groupsBody').innerHTML = '<tr><td colspan="8" class="empty-state">שגיאה: ' + e.message + '</td></tr>';
+  }
+  loadFindings();
+}
+
+let allFindings = [];
+
+async function loadFindings() {
+  try {
+    const data = await callAPI('getFindingsForTeacher');
+    allFindings = data.findings || [];
+    renderFindings();
+  } catch(e) {
+    document.getElementById('findingsBody').innerHTML = '<div class="empty-state">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+function renderFindings() {
+  const body = document.getElementById('findingsBody');
+  const pendingCount = allFindings.filter(f => f.status === 'pending').length;
+  const badge = document.getElementById('findingsPendingBadge');
+  if (badge) badge.innerHTML = pendingCount ? `<span class="badge badge-warning">${pendingCount}</span>` : '';
+
+  if (!allFindings.length) {
+    body.innerHTML = '<div class="empty-state">עדיין אין ממצאים — הם מופיעים כאן ברגע שקבוצה שומרת תשובה שמזינה לתוצר.</div>';
+    return;
+  }
+
+  const bySection = {};
+  allFindings.forEach(f => {
+    const key = f.project_section || '—';
+    if (!bySection[key]) bySection[key] = [];
+    bySection[key].push(f);
+  });
+
+  const statusLabel = { pending: 'ממתין לאישור', approved: 'אושר', returned: 'הוחזר לתיקון' };
+  const statusClass = { pending: 'badge-warning', approved: 'badge-success', returned: 'badge-error' };
+
+  body.innerHTML = Object.keys(bySection).sort((a, b) => (Number(a)||99) - (Number(b)||99)).map(secNum => {
+    const sec = FIELDS_BY_SECTION[Number(secNum)];
+    const title = sec ? `סעיף ${secNum} — ${sec.name}` : 'לא משויך לסעיף';
+    const cards = bySection[secNum].map(f => `
+      <div class="finding-card">
+        <div class="finding-card-header">
+          <span class="finding-card-source">${escapeHtml(f.group_name)} · ${escapeHtml(f.unit_name)}${f.block_title ? ' · ' + escapeHtml(f.block_title) : ''}</span>
+          <span class="badge ${statusClass[f.status] || 'badge-warning'}">${statusLabel[f.status] || f.status}</span>
+        </div>
+        <div class="finding-card-content">${escapeHtml(f.content)}</div>
+        ${f.teacher_note ? `<div class="finding-teacher-note">💬 ${escapeHtml(f.teacher_note)}</div>` : ''}
+        <div class="finding-card-actions">
+          <input type="text" class="finding-note-input" id="finding_note_${f.finding_id}" placeholder="הערה (אופציונלי)" value="${escapeHtml(f.teacher_note || '')}" />
+          <button class="btn-sm btn-success" onclick="setFindingStatus('${f.finding_id}','approved')">✓ אשר</button>
+          <button class="btn-sm btn-danger" onclick="setFindingStatus('${f.finding_id}','returned')">↩ החזר לתיקון</button>
+        </div>
+      </div>
+    `).join('');
+    return `<div class="findings-section-group"><div class="findings-section-title">${title}</div>${cards}</div>`;
+  }).join('');
+}
+
+async function setFindingStatus(findingId, status) {
+  const noteEl = document.getElementById('finding_note_' + findingId);
+  const teacher_note = noteEl ? noteEl.value.trim() : '';
+  try {
+    await callAPI('updateFindingStatus', { finding_id: findingId, status, teacher_note });
+    await loadFindings();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function renderStats() {
+  const total      = allGroups.length;
+  const avg        = total ? Math.round(allGroups.reduce((s, g) => s + g.percent, 0) / total) : 0;
+  const done       = allGroups.filter(g => g.percent === 100).length;
+  const inProgress = allGroups.filter(g => g.percent > 0 && g.percent < 100).length;
+  const stuck      = allGroups.filter(g => {
+    if (!g.last_active) return true;
+    return Date.now() - new Date(g.last_active).getTime() > 7 * 24 * 60 * 60 * 1000;
+  }).length;
+  document.getElementById('stGroups').textContent    = total;
+  document.getElementById('stAvg').textContent        = avg + '%';
+  document.getElementById('stDone').textContent       = done;
+  document.getElementById('stInProgress').textContent = inProgress;
+  document.getElementById('stStuck').textContent      = stuck;
+}
+
+function renderGroups(groups) {
+  const tbody = document.getElementById('groupsBody');
+  if (!groups.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state">אין קבוצות — לחצו "+ הוסף קבוצה"</td></tr>'; return; }
+
+  // מקבצים לפי כיתה — בית ספר ← כיתה ← קבוצה ← תלמיד
+  const byClass = {};
+  groups.forEach(g => {
+    const key = g.class_id || '';
+    if (!byClass[key]) byClass[key] = [];
+    byClass[key].push(g);
+  });
+  const classOrder = Object.keys(byClass).sort((a, b) => {
+    const nameA = a ? (allClasses.find(c => c.class_id === a)?.class_name || a) : 'ללא כיתה';
+    const nameB = b ? (allClasses.find(c => c.class_id === b)?.class_name || b) : 'ללא כיתה';
+    if (!a) return 1; // "ללא כיתה" תמיד אחרון
+    if (!b) return -1;
+    return nameA.localeCompare(nameB, 'he');
+  });
+
+  tbody.innerHTML = classOrder.map(classKey => {
+    const className = classKey ? (allClasses.find(c => c.class_id === classKey)?.class_name || classKey) : 'ללא כיתה';
+    const header = `<tr><td colspan="8" style="background:var(--dark2);font-family:var(--font-display);font-weight:700;font-size:13px;padding:10px 14px;">🏫 כיתה ${escapeHtml(className)}</td></tr>`;
+    return header + byClass[classKey].map(g => renderGroupRow(g)).join('');
+  }).join('');
+}
+
+function renderGroupRow(g) {
+    const prog = `<div class="prog-wrap"><div class="prog-bar"><div class="prog-fill" style="width:${g.percent}%"></div></div><div class="prog-pct">${g.percent}%</div></div>`;
+
+    const cur = parseInt(g.current_section) || 1;
+    const dots = Array.from({length:8},(_,i)=>{
+      const n = i+1;
+      const cls = n < cur ? 'done' : n === cur ? 'current' : 'empty';
+      const txt = n < cur ? '✓' : String(n);
+      return `<div class="sec-dot ${cls}" title="סעיף ${n}: ${SECTION_NAMES[n]}">${txt}</div>`;
+    }).join('');
+
+    const members = g.members || [];
+    const c = g.contribution || {};
+    const contrib = `<div class="contrib-wrap">
+      ${members.map(m => `<span class="contrib-pill pill-member">${m.split('@')[0]}:${c[m]||0}%</span>`).join('')}
+      <span class="contrib-pill pill-pair">ביחד:${c.pair||0}%</span>
+    </div>`;
+
+    const membersHtml = `<div class="members-wrap">${members.map(m => `<span class="member-email">${m}</span>`).join('') || '—'}</div>`;
+
+    const diff = g.last_active ? Date.now() - new Date(g.last_active).getTime() : Infinity;
+    const days = Math.floor(diff / 86400000);
+    const hrs  = Math.floor(diff / 3600000);
+    const mins = Math.floor(diff / 60000);
+    const laText = !g.last_active ? 'לא פעיל' : mins < 60 ? 'לפני '+mins+' דק\'' : hrs < 24 ? 'לפני '+hrs+' שע\'' : 'לפני '+days+' ימים';
+    const laCls  = !g.last_active ? 'la-none' : days > 7 ? 'la-old' : days > 2 ? 'la-mid' : 'la-recent';
+
+    return `<tr>
+      <td><strong>${g.group_name || g.group_id}</strong></td>
+      <td>${g.site_name || '—'}${g.site_url ? '<br><a href="'+g.site_url+'" target="_blank" style="font-size:11px;color:var(--blue-light);">🔗 קישור</a>' : ''}</td>
+      <td>${membersHtml}</td>
+      <td><div class="sections-mini">${dots}</div></td>
+      <td>${prog}</td>
+      <td>${contrib}</td>
+      <td><span class="${laCls}">${days > 7 ? '⚠️ ' : ''}${laText}</span></td>
+      <td style="white-space:nowrap;">
+        <button class="btn-sm btn-back" onclick="openGroupModal('${g.group_id}')">פרטים</button>
+        <button class="btn-sm btn-primary" onclick="openGroupProduct('${g.group_id}')">📄 תוצר</button>
+      </td>
+    </tr>`;
+}
+
+function filterGroups(q) {
+  const status = document.getElementById('filterStatus').value;
+  let filtered = allGroups;
+  if (q) filtered = filtered.filter(g =>
+    (g.site_name||'').includes(q) ||
+    (g.group_name||'').includes(q) ||
+    (g.members||[]).some(m => m.includes(q))
+  );
+  if (status === 'done')   filtered = filtered.filter(g => g.percent === 100);
+  if (status === 'stuck')  filtered = filtered.filter(g => { const d = g.last_active ? (Date.now()-new Date(g.last_active).getTime())/86400000 : 999; return d > 7; });
+  if (status === 'active') filtered = filtered.filter(g => { const d = g.last_active ? (Date.now()-new Date(g.last_active).getTime())/86400000 : 999; return d <= 7 && g.percent < 100; });
+  renderGroups(filtered);
+}
+
+/** פותח את פרטי הקבוצה ומגלגל ישר לתוצר שלה (עריכה/צפייה בסעיפים), במקום להתחיל מלמעלה. */
+async function openGroupProduct(group_id) {
+  await openGroupModal(group_id);
+  const target = document.querySelector('.group-subsection');
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/** מוצא את היחידה שהוצגה לאחרונה במצגת (last_presented_at הכי עדכני), נשמר בגיליון — לא בדפדפן, כדי שיעבוד גם ממחשב אחר. */
+function renderContinueGroupBar() {
+  const bar = document.getElementById('continueGroupBar');
+  if (!bar) return;
+  const withTimestamp = allUnits
+    .map((u, idx) => ({ u, idx }))
+    .filter(x => x.u.last_presented_at);
+  if (!withTimestamp.length) { bar.innerHTML = ''; return; }
+  const last = withTimestamp.reduce((a, b) => new Date(a.u.last_presented_at) > new Date(b.u.last_presented_at) ? a : b);
+  bar.innerHTML = `
+    <div class="card" style="cursor:pointer;border:1px solid rgba(30,144,255,0.35);background:rgba(30,144,255,0.06);margin-bottom:14px;" onclick="openPresentation(${last.idx})">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">▶️</span>
+        <div>
+          <div style="font-weight:700;">המשך מאיפה שעצרתי</div>
+          <div style="font-size:13px;color:var(--muted);">${escapeHtml(last.u.unit_name || 'יחידה')}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function openGroupModal(group_id) {
+  const group = allGroups.find(g => g.group_id === group_id);
+  if (!group) return;
+  document.getElementById('groupModalTitle').textContent = (group.group_name || 'קבוצה') + ' — פרטים';
+  document.getElementById('groupModalContent').innerHTML = '<div class="empty-state"><span class="loading-spinner"></span></div>';
+  showModal('groupModal');
+
+  try {
+    const data = await callAPI('getGroupData', { group_id });
+    currentGroupDetail = data;
+    currentGroupId     = group_id;
+    const sections = data.sections || {};
+    const members  = data.group.members || [];
+    const c = data.contribution || {};
+
+    const secCells = Array.from({length:8},(_,i)=>{
+      const n = i+1;
+      const done = sections['section_'+n] ? true : false;
+      return `<div class="sec-detail ${done?'done':''}">
+        <div class="sec-detail-num">סעיף ${n}</div>
+        <div class="sec-detail-icon">${done?'✅':SECTION_ICONS[n]}</div>
+        <div class="sec-detail-name">${SECTION_NAMES[n]}</div>
+      </div>`;
+    }).join('');
+
+    document.getElementById('groupModalContent').innerHTML = `
+      <div class="group-subsection" style="margin-top:0;">
+        <div class="group-subsection-title">✏️ עריכת פרטי קבוצה</div>
+        <div class="form-group"><label>שם הקבוצה</label><input type="text" id="editGroupNameInput" value="${escapeHtml(group.group_name || '')}" /></div>
+        <div class="form-group">
+          <label>כיתה</label>
+          <select id="editGroupClassSelect">
+            <option value="">ללא כיתה</option>
+            ${allClasses.map(c => `<option value="${c.class_id}" ${c.class_id === group.class_id ? 'selected' : ''}>${escapeHtml(c.class_name)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn-sm btn-primary" id="saveGroupDetailsBtn" onclick="saveGroupDetails('${group_id}')">שמור שינויים</button>
+          <button class="btn-sm" style="color:var(--error);border-color:var(--error);" id="deleteGroupBtn" onclick="deleteGroupClick('${group_id}')">🗑️ מחק קבוצה</button>
+          <span id="editGroupStatus" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+      </div>
+      ${group.site_url ? '<a href="'+group.site_url+'" target="_blank" style="color:var(--blue-light);font-size:13px;display:block;margin-bottom:14px;">🔗 '+group.site_url+'</a>' : ''}
+      <div class="sections-detail">${secCells}</div>
+      <div style="margin-top:16px;padding:14px;background:var(--dark3);border-radius:10px;">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;">תרומה לפרויקט</div>
+        <div class="contrib-wrap">
+          ${members.map(m => `<span class="contrib-pill pill-member" style="font-size:12px;padding:4px 10px;">${m} (solo): ${c[m]||0}%</span>`).join('')}
+          <span class="contrib-pill pill-pair" style="font-size:12px;padding:4px 10px;">ביחד: ${c.pair||0}%</span>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;">חברי הקבוצה</div>
+        <div id="memberList">${members.map(m => `
+          <div class="member-row">
+            <span class="member-row-email">${m}</span>
+            <button class="member-remove" onclick="removeMember('${group_id}','${m}')">✕ הסר</button>
+          </div>`).join('')}</div>
+        <div class="add-member-row">
+          <input type="email" id="newMemberEmail" placeholder="מייל תלמיד חדש" />
+          <button onclick="addMember('${group_id}')">הוסף</button>
+        </div>
+      </div>
+      <div class="group-subsection">
+        <div class="group-subsection-title">✏️ עריכה והערות על סעיפי הפרויקט</div>
+        <div class="form-group">
+          <select id="teacherEditSectionSelect" onchange="renderTeacherEditSection()">
+            ${FIELDS_BY_SECTION.map((s, n) => s ? `<option value="${n}">סעיף ${n} — ${s.name}</option>` : '').join('')}
+          </select>
+        </div>
+        <div id="teacherEditSectionBody"></div>
+      </div>
+      <div class="group-subsection">
+        <div class="group-subsection-title">📚 תשובות מהיחידות (שאלות אישיות)</div>
+        <div id="groupLessonAnswers"><span class="loading-spinner"></span></div>
+      </div>
+      <div class="group-subsection">
+        <div class="group-subsection-title">🤖 יומן הצ'אטבוט</div>
+        <div id="groupChatLog"><span class="loading-spinner"></span></div>
+      </div>
+    `;
+
+    renderTeacherEditSection();
+    loadGroupLessonAnswers(group_id);
+    loadGroupChatLog(group_id);
+  } catch(e) {
+    document.getElementById('groupModalContent').innerHTML = '<div class="empty-state">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+/** מציג לעריכה את שדות הסעיף הנבחר — מה שהתלמידים כתבו (לקריאה) + עריכת מורה לכל שדה + הערה כללית לסעיף. */
+function renderTeacherEditSection() {
+  const num = parseInt(document.getElementById('teacherEditSectionSelect').value);
+  const sec = FIELDS_BY_SECTION[num];
+  let studentData = {};
+  try { studentData = JSON.parse((currentGroupDetail.sections || {})['section_' + num] || '{}'); } catch(e) { studentData = {}; }
+  const teacherData = (currentGroupDetail.teacherEdits || {})['section_' + num] || {};
+  const comment = (currentGroupDetail.comments || {})['section_' + num] || '';
+
+  const fieldsHtml = sec.fields.map(f => `
+    <div class="form-group">
+      <label>${f.label} — מה הקבוצה כתבה</label>
+      <div style="font-size:12px;color:var(--muted);background:var(--dark3);border-radius:8px;padding:8px 10px;margin-bottom:6px;white-space:pre-wrap;">${escapeHtml(studentData[f.id] || '(עוד לא מולא)')}</div>
+      <label>עריכת המורה לשדה זה (תוצג לתלמיד בצבע נפרד, לא תדרוס את מה שהם כתבו)</label>
+      <textarea id="teacherField_${f.id}" rows="3" placeholder="השאירו ריק אם אין הערה לשדה הזה">${escapeHtml(teacherData[f.id] || '')}</textarea>
+    </div>
+  `).join('');
+
+  document.getElementById('teacherEditSectionBody').innerHTML = `
+    ${fieldsHtml}
+    <div class="form-group">
+      <label>הערת מורה כללית לסעיף (תוצג לתלמיד למעלה)</label>
+      <textarea id="teacherSectionComment" rows="3">${escapeHtml(comment)}</textarea>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn-sm btn-primary" onclick="saveTeacherSectionEditClick(${num})">שמור עריכה והערה</button>
+      <span id="teacherEditStatus" style="font-size:12px;color:var(--muted);"></span>
+    </div>
+  `;
+}
+
+async function saveTeacherSectionEditClick(num) {
+  const sec = FIELDS_BY_SECTION[num];
+  const teacher_fields = {};
+  sec.fields.forEach(f => {
+    const val = document.getElementById('teacherField_' + f.id).value.trim();
+    if (val) teacher_fields[f.id] = val;
+  });
+  const comment = document.getElementById('teacherSectionComment').value.trim();
+  const status = document.getElementById('teacherEditStatus');
+  status.textContent = 'שומר...'; status.style.color = 'var(--muted)';
+  try {
+    await callAPI('saveTeacherSectionEdit', { group_id: currentGroupId, section_num: num, teacher_fields, comment });
+    currentGroupDetail.teacherEdits = currentGroupDetail.teacherEdits || {};
+    currentGroupDetail.teacherEdits['section_' + num] = teacher_fields;
+    currentGroupDetail.comments = currentGroupDetail.comments || {};
+    currentGroupDetail.comments['section_' + num] = comment;
+    status.textContent = '✓ נשמר'; status.style.color = 'var(--success)';
+  } catch(e) {
+    status.textContent = 'שגיאה: ' + e.message; status.style.color = 'var(--error)';
+  }
+}
+
+async function saveGroupDetails(group_id) {
+  const name   = document.getElementById('editGroupNameInput').value.trim();
+  const classId = document.getElementById('editGroupClassSelect').value;
+  const status = document.getElementById('editGroupStatus');
+  const btn    = document.getElementById('saveGroupDetailsBtn');
+  if (!name) { status.textContent = 'נא להזין שם קבוצה'; status.style.color = 'var(--error)'; return; }
+  if (btn.disabled) return; // מניעת לחיצה כפולה
+  btn.disabled = true;
+  status.textContent = 'שומר...'; status.style.color = 'var(--muted)';
+  try {
+    await callAPI('updateGroup', { group_id, group_name: name, class_id: classId });
+    status.textContent = '✓ נשמר'; status.style.color = 'var(--success)';
+    await loadData();
+  } catch(e) {
+    status.textContent = 'שגיאה: ' + e.message; status.style.color = 'var(--error)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteGroupClick(group_id) {
+  const btn = document.getElementById('deleteGroupBtn');
+  if (btn.disabled) return;
+  if (!confirm('למחוק את הקבוצה לצמיתות? הפעולה לא ניתנת לביטול.')) return;
+  btn.disabled = true;
+  try {
+    await callAPI('deleteGroup', { group_id });
+    hideModal('groupModal');
+    await loadData();
+  } catch(e) {
+    alert('שגיאה: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(str) {
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadGroupLessonAnswers(group_id) {
+  const el = document.getElementById('groupLessonAnswers');
+  try {
+    const data = await callAPI('getGroupLessonAnswers', { group_id });
+    const answers = data.answers || [];
+    if (!answers.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);">אין עדיין תשובות שמורות.</div>'; return; }
+    el.innerHTML = answers.map(a => `
+      <div class="lanswer-card">
+        <div class="lanswer-source">מיחידה: ${escapeHtml(a.unit_name)}</div>
+        <div class="lanswer-question">${escapeHtml(a.question_prompt)}</div>
+        <div class="lanswer-text">${escapeHtml(a.answer_text)}</div>
+      </div>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--error);">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+async function loadGroupChatLog(group_id) {
+  const el = document.getElementById('groupChatLog');
+  try {
+    const data = await callAPI('getGroupChatLog', { group_id });
+    const logs = data.logs || [];
+    if (!logs.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);">אין עדיין שיחות עם הצ\'אטבוט.</div>'; return; }
+    el.innerHTML = '<div class="chatlog-wrap">' + logs.map(l => `
+      <div class="chatlog-msg ${l.role === 'student' ? 'student' : 'bot'}">
+        ${escapeHtml(l.message)}
+        <div class="chatlog-meta">${l.role === 'student' ? (l.student_email||'') : 'בוט'} · סעיף ${l.section_num||''}</div>
+      </div>
+    `).join('') + '</div>';
+  } catch(e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--error);">שגיאה: ' + e.message + '</div>';
+  }
+}
+
+async function addMember(group_id) {
+  const email = document.getElementById('newMemberEmail').value.trim();
+  if (!email) return;
+  try {
+    await callAPI('addMember', { group_id, member_email: email });
+    await loadData();
+    openGroupModal(group_id);
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function removeMember(group_id, email) {
+  if (!confirm('להסיר את ' + email + ' מהקבוצה?')) return;
+  try {
+    await callAPI('removeMember', { group_id, member_email: email });
+    await loadData();
+    openGroupModal(group_id);
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function renderUnits() {
+  const grid = document.getElementById('unitsGrid');
+  if (!allUnits.length) { grid.innerHTML = '<div class="empty-state">אין יחידות — צור יחידה חדשה</div>'; return; }
+  grid.innerHTML = allUnits.map((u, i) => {
+    const isOpen = u.is_open === 'TRUE' || u.is_open === true;
+    const lessonBadge = u.lesson_num ? `<span style="font-size:10px;color:var(--muted);">יחידה ${u.lesson_num} · </span>` : '';
+    const summaryPreview = u.summary ? `<div style="font-size:11px;color:var(--muted);margin:6px 0;line-height:1.5;">${u.summary.slice(0,120)}${u.summary.length>120?'…':''}</div>` : '';
+    const monthBadge = u.planned_month ? `<span class="badge badge-blue" style="margin-bottom:8px;">📅 ${u.planned_month}</span>` : '';
+    return `<div class="unit-card ${isOpen?'open':''}">
+      <div class="unit-name">${lessonBadge}${u.unit_name}</div>
+      <div class="unit-meta">${SECTION_ICONS[u.section_linked]||''} סעיף ${u.section_linked} — ${SECTION_NAMES[u.section_linked]||''}</div>
+      ${monthBadge}
+      ${summaryPreview}
+      <div class="unit-toggle">
+        <span style="font-size:12px;color:${isOpen?'var(--success)':'var(--muted)'}">${isOpen?'פתוח':'סגור'}</span>
+        <label class="toggle-switch">
+          <input type="checkbox" ${isOpen?'checked':''} onchange="toggleUnit('${u.unit_id}',this.checked,${i})">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button class="btn-sm btn-back" style="flex:1;" onclick="openEditUnit(${i})">✏️ ערוך</button>
+        <button class="btn-sm btn-back" style="flex:1;" onclick="openBlocksEditor(${i})">🧩 בלוקים (${(u.blocks||[]).length})</button>
+      </div>
+      <button class="btn-sm btn-primary" style="width:100%;margin-top:6px;" onclick="openPresentation(${i})" ${(u.blocks||[]).length?'':'disabled'}>🎬 הצג מצגת</button>
+    </div>`;
+  }).join('');
+}
+
+async function toggleUnit(unit_id, is_open, idx) {
+  try {
+    await callAPI('toggleUnit', { unit_id, is_open });
+    allUnits[idx].is_open = is_open ? 'TRUE' : 'FALSE';
+    renderUnits();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function createUnit() {
+  const name    = document.getElementById('unitName').value.trim();
+  const section = document.getElementById('unitSection').value;
+  const isOpen  = document.getElementById('unitOpenNow').value === 'true';
+  if (!name) { alert('נא להכניס שם'); return; }
+  try {
+    await callAPI('addUnit', { unit_name: name, section_linked: section, is_open: isOpen });
+    hideModal('addUnitModal');
+    document.getElementById('unitName').value = '';
+    await loadData();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function openEditUnit(idx) {
+  const u = allUnits[idx];
+  document.getElementById('editUnitId').value         = u.unit_id;
+  document.getElementById('editUnitName').value        = u.unit_name || '';
+  document.getElementById('editUnitSection').value     = u.section_linked || '1';
+  document.getElementById('editUnitMonth').value       = u.planned_month || '';
+  document.getElementById('editUnitImage').value       = u.image_url || '';
+  document.getElementById('editUnitEmbed').value       = u.embed_url || '';
+  document.getElementById('editUnitSummary').value     = u.summary || '';
+  document.getElementById('editUnitAssignment').value  = u.assignment_summary || '';
+  showModal('editUnitModal');
+  renderLivePreview();
+}
+
+function renderLivePreview() {
+  const name       = document.getElementById('editUnitName').value.trim();
+  const imageUrl   = document.getElementById('editUnitImage').value.trim();
+  const embedUrl   = document.getElementById('editUnitEmbed').value.trim();
+  const summary    = document.getElementById('editUnitSummary').value.trim();
+  const assignment = document.getElementById('editUnitAssignment').value.trim();
+
+  document.getElementById('previewName').textContent = name || '(ללא שם עדיין)';
+
+  const img = document.getElementById('previewImage');
+  if (imageUrl) { img.src = imageUrl; img.style.display = 'block'; } else { img.style.display = 'none'; img.src = ''; }
+
+  const embedWrap  = document.getElementById('previewEmbedWrap');
+  const embedFrame = document.getElementById('previewEmbedFrame');
+  if (embedUrl) { embedFrame.src = embedUrl; embedWrap.style.display = 'block'; } else { embedWrap.style.display = 'none'; embedFrame.src = ''; }
+
+  document.getElementById('previewSummary').textContent    = summary || '';
+  document.getElementById('previewAssignment').textContent = assignment ? '📝 ' + assignment : '';
+}
+
+async function saveEditedUnit() {
+  const unit_id = document.getElementById('editUnitId').value;
+  try {
+    await callAPI('updateLesson', {
+      unit_id,
+      unit_name:          document.getElementById('editUnitName').value.trim(),
+      section_linked:     document.getElementById('editUnitSection').value,
+      planned_month:      document.getElementById('editUnitMonth').value,
+      image_url:          document.getElementById('editUnitImage').value.trim(),
+      embed_url:          document.getElementById('editUnitEmbed').value.trim(),
+      summary:            document.getElementById('editUnitSummary').value.trim(),
+      assignment_summary: document.getElementById('editUnitAssignment').value.trim()
+    });
+    hideModal('editUnitModal');
+    await loadData();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+// ========== ניהול בלוקים ביחידה ==========
+
+function openBlocksEditor(idx) {
+  document.getElementById('blocksUnitIdx').value = idx;
+  const u = allUnits[idx];
+  document.getElementById('blocksModalTitle').textContent = 'בלוקים ביחידה — ' + u.unit_name;
+  document.getElementById('blocksListSection').style.display = 'block';
+  document.getElementById('blockFormSection').style.display = 'none';
+  renderBlocksList();
+  showModal('blocksModal');
+}
+
+function renderBlocksList() {
+  const idx = parseInt(document.getElementById('blocksUnitIdx').value);
+  const u = allUnits[idx];
+  const blocks = (u.blocks || []).slice().sort((a,b) => (Number(a.block_order)||99) - (Number(b.block_order)||99));
+  const list = document.getElementById('blocksList');
+
+  if (!blocks.length) { list.innerHTML = '<div class="empty-state">אין עדיין בלוקים ביחידה זו.</div>'; return; }
+
+  const typeLabel = { teach: '📖 הוראה', game: '🎮 משחק', question: '🎯 שאלה', quiz: '✅ בדיקת הבנה', question_structured: '📝 שאלה מובנית' };
+  list.innerHTML = blocks.map((b, i) => `
+    <div class="block-row">
+      <span class="block-type-badge ${b.block_type}">${typeLabel[b.block_type] || b.block_type}</span>
+      <span class="block-row-title">${escapeHtml(b.title || '(ללא כותרת)')}</span>
+      <div class="block-row-actions">
+        <button onclick="moveBlock('${b.block_id}',-1)" ${i===0?'disabled':''} title="הזז למעלה">▲</button>
+        <button onclick="moveBlock('${b.block_id}',1)" ${i===blocks.length-1?'disabled':''} title="הזז למטה">▼</button>
+        <button onclick="openBlockForm('${b.block_id}')" title="ערוך">✏️</button>
+        <button onclick="deleteBlockRow('${b.block_id}')" title="מחק">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function populateTargetFieldOptions(selected, selectId) {
+  const sel = document.getElementById(selectId || 'blockTargetField');
+  sel.innerHTML = FIELDS_BY_SECTION.map((sec, num) => {
+    if (!sec) return '';
+    return `<optgroup label="סעיף ${num} — ${sec.name}">` +
+      sec.fields.map(f => `<option value="${f.id}" ${f.id===selected?'selected':''}>${f.label}</option>`).join('') +
+      '</optgroup>';
+  }).join('');
+}
+
+/** מוצא לאיזה סעיף (1-8) שייך שדה נתון, לפי FIELDS_BY_SECTION — כדי לגזור project_section אוטומטית מ-target_field. */
+function sectionNumForField(fieldId) {
+  for (let num = 1; num < FIELDS_BY_SECTION.length; num++) {
+    const sec = FIELDS_BY_SECTION[num];
+    if (sec && sec.fields.some(f => f.id === fieldId)) return num;
+  }
+  return '';
+}
+
+function openBlockForm(blockId) {
+  const idx = parseInt(document.getElementById('blocksUnitIdx').value);
+  const u = allUnits[idx];
+  const block = blockId ? (u.blocks || []).find(b => b.block_id === blockId) : null;
+
+  document.getElementById('editBlockId').value = blockId || '';
+  document.getElementById('blockType').value = block ? block.block_type : 'teach';
+  document.getElementById('blockTitle').value = block ? (block.title || '') : '';
+  document.getElementById('blockBody').value = block ? (block.body || '') : '';
+  document.getElementById('blockMediaType').value = block ? (block.media_type || '') : '';
+  document.getElementById('blockMediaUrl').value = block ? (block.media_url || '') : '';
+  document.getElementById('blockGameType').value = block ? (block.game_type || 'memory') : 'memory';
+  const gamePairs = block && Array.isArray(block.game_data) ? block.game_data : (block && block.game_data && block.game_data.pairs) || [];
+  document.getElementById('blockGamePairs').value = gamePairs.length
+    ? gamePairs.map(p => (p.term||'') + ' | ' + (p.definition||'')).join('\n')
+    : '';
+  document.getElementById('blockGameFeedbackCorrect').value = block && !Array.isArray(block.game_data) && block.game_data ? (block.game_data.feedbackCorrect || '') : '';
+  document.getElementById('blockGameFeedbackIncorrect').value = block && !Array.isArray(block.game_data) && block.game_data ? (block.game_data.feedbackIncorrect || '') : '';
+
+  document.getElementById('blockQuestionPrompt').value = block ? (block.question_prompt || '') : '';
+  document.getElementById('blockAnswerScope').value = block ? (block.answer_scope || 'learning') : 'learning';
+  populateTargetFieldOptions(block ? block.target_field : '', 'blockTargetField');
+
+  const quizData = block && block.block_type === 'quiz' ? (block.game_data || {}) : {};
+  document.getElementById('blockQuizMode').value = quizData.mode === 'classify' ? 'classify' : 'select';
+  document.getElementById('blockQuizPrompt').value = block && block.block_type === 'quiz' ? (block.question_prompt || '') : '';
+  document.getElementById('blockQuizOptions').value = (quizData.options || []).join('\n');
+  document.getElementById('blockQuizCorrect').value = (quizData.correct || []).map(i => i + 1).join(',');
+  document.getElementById('blockQuizCategories').value = (quizData.categories || []).join('\n');
+  document.getElementById('blockQuizItems').value = (quizData.items || []).map((item, i) => {
+    const catIdx = (quizData.correctMap || [])[i];
+    const catName = catIdx !== undefined && quizData.categories ? (quizData.categories[catIdx] || '') : '';
+    return item + ' | ' + catName;
+  }).join('\n');
+  document.getElementById('blockQuizFeedbackCorrect').value = quizData.feedbackCorrect || '';
+  document.getElementById('blockQuizFeedbackIncorrect').value = quizData.feedbackIncorrect || '';
+  renderQuizModeFields();
+
+  const sqData = block && block.block_type === 'question_structured' ? (block.game_data || {}) : {};
+  document.getElementById('blockSQPrompt').value = block && block.block_type === 'question_structured' ? (block.question_prompt || '') : '';
+  document.getElementById('blockSQAnswerScope').value = block ? (block.answer_scope || 'project') : 'project';
+  document.getElementById('blockSQCategories').value = (sqData.categories || []).join('\n');
+  document.getElementById('blockSQFillPrompt').value = sqData.fillPrompt || '';
+  document.getElementById('blockSQEvidenceLabel').value = sqData.evidenceLabel || '';
+  document.getElementById('blockSQEvidenceLinkLabel').value = sqData.evidenceLinkLabel || '';
+  document.getElementById('blockSQExplainParts').value = (sqData.explainParts || []).join('\n');
+  document.getElementById('blockSQRatingLabel').value = sqData.ratingLabel || '';
+  document.getElementById('blockSQRatingOptions').value = (sqData.ratingOptions || []).join('\n');
+  document.getElementById('blockSQRatingReasonLabel').value = sqData.ratingReasonLabel || '';
+  document.getElementById('blockSQChecklist').value = (sqData.checklist || []).join('\n');
+  populateTargetFieldOptions(block ? block.target_field : '', 'blockSQTargetField');
+
+  document.getElementById('blockType').disabled = !!block; // לא משנים סוג בלוק קיים, רק יוצרים חדש מהסוג הרצוי
+  renderBlockFormFields();
+  document.getElementById('blocksListSection').style.display = 'none';
+  document.getElementById('blockFormSection').style.display = 'block';
+}
+
+function closeBlockForm() {
+  document.getElementById('blocksListSection').style.display = 'block';
+  document.getElementById('blockFormSection').style.display = 'none';
+}
+
+function renderBlockFormFields() {
+  const type = document.getElementById('blockType').value;
+  document.getElementById('fieldsTeach').classList.toggle('show', type === 'teach');
+  document.getElementById('fieldsGame').classList.toggle('show', type === 'game');
+  document.getElementById('fieldsQuestion').classList.toggle('show', type === 'question');
+  document.getElementById('fieldsQuiz').classList.toggle('show', type === 'quiz');
+  document.getElementById('fieldsQuestionStructured').classList.toggle('show', type === 'question_structured');
+  if (type === 'quiz') renderQuizModeFields();
+}
+
+function renderQuizModeFields() {
+  const mode = document.getElementById('blockQuizMode').value;
+  document.getElementById('quizModeSelect').style.display = mode === 'select' ? 'block' : 'none';
+  document.getElementById('quizModeClassify').style.display = mode === 'classify' ? 'block' : 'none';
+}
+
+function parseGamePairs(text) {
+  return text.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+    const parts = line.split('|');
+    return { term: (parts[0]||'').trim(), definition: (parts.slice(1).join('|')||'').trim() };
+  });
+}
+
+function parseLines(text) {
+  return text.split('\n').map(line => line.trim()).filter(Boolean);
+}
+
+function parseIndices(text) {
+  return text.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0).map(n => n - 1);
+}
+
+function buildBlockPayload(type) {
+  const title = document.getElementById('blockTitle').value.trim();
+
+  if (type === 'teach') {
+    return {
+      title,
+      body: document.getElementById('blockBody').value.trim(),
+      media_type: document.getElementById('blockMediaType').value,
+      media_url: document.getElementById('blockMediaUrl').value.trim()
+    };
+  }
+  if (type === 'game') {
+    const pairs = parseGamePairs(document.getElementById('blockGamePairs').value);
+    const feedbackCorrect = document.getElementById('blockGameFeedbackCorrect').value.trim();
+    const feedbackIncorrect = document.getElementById('blockGameFeedbackIncorrect').value.trim();
+    return {
+      title,
+      game_type: document.getElementById('blockGameType').value,
+      game_data: (feedbackCorrect || feedbackIncorrect) ? { pairs, feedbackCorrect, feedbackIncorrect } : pairs
+    };
+  }
+  if (type === 'question') {
+    const answerScope = document.getElementById('blockAnswerScope').value;
+    const targetField = document.getElementById('blockTargetField').value;
+    return {
+      title,
+      question_prompt: document.getElementById('blockQuestionPrompt').value.trim(),
+      target_field: targetField,
+      answer_scope: answerScope,
+      project_section: answerScope === 'project' ? sectionNumForField(targetField) : ''
+    };
+  }
+  if (type === 'quiz') {
+    const mode = document.getElementById('blockQuizMode').value;
+    const feedbackCorrect = document.getElementById('blockQuizFeedbackCorrect').value.trim();
+    const feedbackIncorrect = document.getElementById('blockQuizFeedbackIncorrect').value.trim();
+
+    if (mode === 'classify') {
+      const categories = parseLines(document.getElementById('blockQuizCategories').value);
+      const rows = parseGamePairs(document.getElementById('blockQuizItems').value); // {term: item, definition: category name}
+      return {
+        title,
+        question_prompt: document.getElementById('blockQuizPrompt').value.trim(),
+        game_data: {
+          mode: 'classify',
+          categories,
+          items: rows.map(r => r.term),
+          correctMap: rows.map(r => categories.indexOf(r.definition)),
+          feedbackCorrect, feedbackIncorrect
+        }
+      };
+    }
+
+    return {
+      title,
+      question_prompt: document.getElementById('blockQuizPrompt').value.trim(),
+      game_data: {
+        options: parseLines(document.getElementById('blockQuizOptions').value),
+        correct: parseIndices(document.getElementById('blockQuizCorrect').value),
+        feedbackCorrect, feedbackIncorrect
+      }
+    };
+  }
+  if (type === 'question_structured') {
+    const answerScope = document.getElementById('blockSQAnswerScope').value;
+    const targetField = document.getElementById('blockSQTargetField').value;
+    return {
+      title,
+      question_prompt: document.getElementById('blockSQPrompt').value.trim(),
+      target_field: targetField,
+      answer_scope: answerScope,
+      project_section: answerScope === 'project' ? sectionNumForField(targetField) : '',
+      game_data: {
+        categories: parseLines(document.getElementById('blockSQCategories').value),
+        fillPrompt: document.getElementById('blockSQFillPrompt').value.trim(),
+        evidenceLabel: document.getElementById('blockSQEvidenceLabel').value.trim(),
+        evidenceLinkLabel: document.getElementById('blockSQEvidenceLinkLabel').value.trim(),
+        explainParts: parseLines(document.getElementById('blockSQExplainParts').value),
+        ratingLabel: document.getElementById('blockSQRatingLabel').value.trim(),
+        ratingOptions: parseLines(document.getElementById('blockSQRatingOptions').value),
+        ratingReasonLabel: document.getElementById('blockSQRatingReasonLabel').value.trim(),
+        checklist: parseLines(document.getElementById('blockSQChecklist').value)
+      }
+    };
+  }
+  return { title };
+}
+
+async function saveBlockForm() {
+  const idx = parseInt(document.getElementById('blocksUnitIdx').value);
+  const u = allUnits[idx];
+  const blockId = document.getElementById('editBlockId').value;
+  const type = document.getElementById('blockType').value;
+  const payload = buildBlockPayload(type);
+
+  try {
+    if (blockId) {
+      await callAPI('updateLessonBlock', Object.assign({ block_id: blockId }, payload));
+    } else {
+      const nextOrder = (u.blocks || []).length + 1;
+      await callAPI('addLessonBlock', Object.assign({ unit_id: u.unit_id, block_type: type, block_order: nextOrder }, payload));
+    }
+    await loadData();
+    openBlocksEditor(idx);
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function deleteBlockRow(blockId) {
+  if (!confirm('למחוק את הבלוק הזה?')) return;
+  const idx = parseInt(document.getElementById('blocksUnitIdx').value);
+  try {
+    await callAPI('deleteLessonBlock', { block_id: blockId });
+    await loadData();
+    openBlocksEditor(idx);
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function moveBlock(blockId, dir) {
+  const idx = parseInt(document.getElementById('blocksUnitIdx').value);
+  const u = allUnits[idx];
+  const blocks = (u.blocks || []).slice().sort((a,b) => (Number(a.block_order)||99) - (Number(b.block_order)||99));
+  const pos = blocks.findIndex(b => b.block_id === blockId);
+  const swapPos = pos + dir;
+  if (swapPos < 0 || swapPos >= blocks.length) return;
+
+  const a = blocks[pos], b = blocks[swapPos];
+  try {
+    await callAPI('updateLessonBlock', { block_id: a.block_id, block_order: swapPos + 1 });
+    await callAPI('updateLessonBlock', { block_id: b.block_id, block_order: pos + 1 });
+    await loadData();
+    openBlocksEditor(idx);
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function openAddGroupModal() {
+  const sel = document.getElementById('groupClass');
+  sel.innerHTML = '<option value="">ללא כיתה</option>' +
+    allClasses.map(c => `<option value="${c.class_id}">${escapeHtml(c.class_name)}</option>`).join('');
+  document.getElementById('groupName').value = '';
+  document.getElementById('groupMembers').value = '';
+  document.getElementById('addGroupResult').textContent = '';
+  showModal('addGroupModal');
+}
+
+async function addGroup() {
+  const name    = document.getElementById('groupName').value.trim();
+  const members = document.getElementById('groupMembers').value.trim();
+  const cls     = document.getElementById('groupClass').value;
+  const resEl   = document.getElementById('addGroupResult');
+  const btn     = document.getElementById('addGroupConfirmBtn');
+  if (!members) { resEl.textContent = 'נא להכניס לפחות מייל אחד'; resEl.style.color = 'var(--error)'; return; }
+  if (btn.disabled) return; // מניעת לחיצה כפולה שיוצרת שתי קבוצות
+  btn.disabled = true;
+  resEl.textContent = 'יוצר קבוצה...'; resEl.style.color = 'var(--muted)';
+  try {
+    await callAPI('addGroup', { group_name: name, members, class_id: cls });
+    hideModal('addGroupModal');
+    await loadData();
+  } catch(e) { resEl.textContent = 'שגיאה: ' + e.message; resEl.style.color = 'var(--error)'; }
+  finally { btn.disabled = false; }
+}
+
+let bulkImportRows = [];
+
+function openBulkImportModal() {
+  document.getElementById('bulkImportFile').value = '';
+  document.getElementById('bulkImportPreview').innerHTML = '';
+  document.getElementById('bulkImportResult').textContent = '';
+  document.getElementById('bulkImportConfirmBtn').style.display = 'none';
+  bulkImportRows = [];
+  showModal('bulkImportModal');
+}
+
+function downloadGroupsTemplate() {
+  const wsData = [
+    ['כיתה', 'שם קבוצה', 'שם התלמיד/ה', 'מייל התלמיד/ה'],
+    ['כיתה י1', 'קבוצה לדוגמה', 'דנה כהן (שורת דוגמה — מחקו אותה)', 'example1@example.com'],
+    ['כיתה י1', 'קבוצה לדוגמה', 'יוסי לוי (שורת דוגמה — מחקו אותה)', 'example2@example.com'],
+    ['', '', '', ''], ['', '', '', ''], ['', '', '', ''], ['', '', '', ''], ['', '', '', '']
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 30 }, { wch: 28 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'קבוצות');
+  XLSX.writeFile(wb, 'טופס_ייבוא_קבוצות.xlsx');
+}
+
+function onBulkImportFileSelected(input) {
+  const file        = input.files[0];
+  const resEl       = document.getElementById('bulkImportResult');
+  const previewEl   = document.getElementById('bulkImportPreview');
+  const confirmBtn  = document.getElementById('bulkImportConfirmBtn');
+  if (!file) return;
+  resEl.textContent = ''; previewEl.innerHTML = ''; confirmBtn.style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb   = XLSX.read(data, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const raw  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      const rows = [];
+      for (let i = 1; i < raw.length; i++) { // דילוג על שורת הכותרות
+        const r = raw[i];
+        const class_name    = String(r[0] || '').trim();
+        const group_name     = String(r[1] || '').trim();
+        const student_name   = String(r[2] || '').trim();
+        const student_email  = String(r[3] || '').trim().toLowerCase();
+        if (!group_name || !student_email) continue;
+        if (student_email.indexOf('@example.com') !== -1) continue; // שורת דוגמה
+        if (student_email.indexOf('@') === -1) continue;
+        rows.push({ class_name, group_name, student_name, student_email });
+      }
+
+      if (!rows.length) {
+        resEl.textContent = 'לא נמצאו שורות תקינות בקובץ — ודאו שמילאתם שם קבוצה ומייל בכל שורה';
+        resEl.style.color = 'var(--error)';
+        return;
+      }
+
+      bulkImportRows = rows;
+      const groupsMap = {};
+      rows.forEach(r => {
+        const key = r.class_name + '|' + r.group_name;
+        if (!groupsMap[key]) groupsMap[key] = { class_name: r.class_name, group_name: r.group_name, count: 0 };
+        groupsMap[key].count++;
+      });
+      const groupsList = Object.values(groupsMap);
+      previewEl.innerHTML =
+        `<div class="form-hint" style="margin-bottom:8px;">נמצאו ${groupsList.length} קבוצות, ${rows.length} תלמידים:</div>` +
+        '<ul style="font-size:13px;margin-inline-start:18px;margin-bottom:10px;">' +
+        groupsList.map(g => `<li>${escapeHtml(g.group_name)}${g.class_name ? ' (' + escapeHtml(g.class_name) + ')' : ''} — ${g.count} תלמידים</li>`).join('') +
+        '</ul>';
+      confirmBtn.style.display = 'inline-block';
+    } catch (err) {
+      resEl.textContent = 'שגיאה בקריאת הקובץ: ' + err.message;
+      resEl.style.color = 'var(--error)';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function confirmBulkImport() {
+  const resEl      = document.getElementById('bulkImportResult');
+  const confirmBtn = document.getElementById('bulkImportConfirmBtn');
+  if (!bulkImportRows.length) return;
+  resEl.textContent = 'יוצר קבוצות...'; resEl.style.color = 'var(--muted)';
+  confirmBtn.disabled = true;
+  try {
+    const data     = await callAPI('bulkImportGroups', { rows: bulkImportRows });
+    const results  = data.results || [];
+    const created  = results.filter(r => r.status === 'created');
+    const skipped  = results.filter(r => r.status === 'skipped');
+    let msg = `נוצרו ${created.length} קבוצות חדשות.`;
+    if (skipped.length) msg += ` דולגו ${skipped.length} (שם קבוצה כבר קיים: ${skipped.map(s => s.group_name).join(', ')}).`;
+    resEl.textContent = msg; resEl.style.color = 'var(--success)';
+    confirmBtn.style.display = 'none';
+    bulkImportRows = [];
+    await loadData();
+  } catch (e) {
+    resEl.textContent = 'שגיאה: ' + e.message; resEl.style.color = 'var(--error)';
+  } finally {
+    confirmBtn.disabled = false;
+  }
+}
+
+function openAddClassModal() {
+  document.getElementById('editClassId').value = '';
+  document.getElementById('classModalTitle').textContent = 'כיתה חדשה';
+  document.getElementById('className').value = '';
+  document.getElementById('addClassResult').textContent = '';
+  showModal('addClassModal');
+}
+
+function openEditClassModal(classId) {
+  const c = allClasses.find(x => x.class_id === classId);
+  if (!c) return;
+  document.getElementById('editClassId').value = classId;
+  document.getElementById('classModalTitle').textContent = 'עריכת כיתה';
+  document.getElementById('className').value = c.class_name;
+  document.getElementById('addClassResult').textContent = '';
+  showModal('addClassModal');
+}
+
+async function saveClass() {
+  const classId = document.getElementById('editClassId').value;
+  const name    = document.getElementById('className').value.trim();
+  const resEl   = document.getElementById('addClassResult');
+  const btn     = document.getElementById('saveClassConfirmBtn');
+  if (!name) { resEl.textContent = 'נא להזין שם כיתה'; resEl.style.color = 'var(--error)'; return; }
+  if (btn.disabled) return; // מניעת לחיצה כפולה שיוצרת שתי כיתות
+  btn.disabled = true;
+  resEl.textContent = 'שומר...'; resEl.style.color = 'var(--muted)';
+  try {
+    if (classId) await callAPI('updateClass', { class_id: classId, class_name: name });
+    else await callAPI('addClass', { class_name: name });
+    hideModal('addClassModal');
+    await loadData();
+  } catch(e) { resEl.textContent = 'שגיאה: ' + e.message; resEl.style.color = 'var(--error)'; }
+  finally { btn.disabled = false; }
+}
+
+async function deleteClassClick(classId) {
+  if (!confirm('למחוק את הכיתה? הקבוצות ששייכות אליה יישארו, רק יוצאו מהכיתה.')) return;
+  try {
+    await callAPI('deleteClass', { class_id: classId });
+    await loadData();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function renderClasses() {
+  const body = document.getElementById('classesBody');
+  if (!allClasses.length) {
+    body.innerHTML = '<div class="empty-state">עדיין אין כיתות — לחצו "+ כיתה חדשה" כדי להתחיל.</div>';
+    return;
+  }
+  body.innerHTML = `<div class="table-wrap"><table><thead><tr><th>כיתה</th><th>קבוצות</th><th></th></tr></thead><tbody>` +
+    allClasses.map(c => {
+      const count = allGroups.filter(g => g.class_id === c.class_id).length;
+      return `<tr>
+        <td><strong>${escapeHtml(c.class_name)}</strong></td>
+        <td>${count}</td>
+        <td>
+          <button class="btn-sm btn-back" onclick="openEditClassModal('${c.class_id}')">✏️ ערוך</button>
+          <button class="btn-sm btn-danger" onclick="deleteClassClick('${c.class_id}')">🗑️ מחק</button>
+        </td>
+      </tr>`;
+    }).join('') + `</tbody></table></div>`;
+}
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('show'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('show');
+}
+
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function hideModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', function(e){ if(e.target===this) this.classList.remove('show'); }));
+
+function goBack()  { window.location.href = 'https://nisan1234-afk.github.io/teacher/'; }
+function logout()  { sessionStorage.removeItem('kitahUser'); window.location.href = TICHER_URL; }
+
+// ========== מילון מושגים (טולטיפים) — זהה בעקרונו לזה שב-student.html ==========
+
+function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function gameDataPairs(gameData) {
+  if (!gameData) return [];
+  return Array.isArray(gameData) ? gameData : (gameData.pairs || []);
+}
+
+function getGlossaryForLesson(unit) {
+  const gameBlock = (unit.blocks || []).find(b => b.block_type === 'game' && gameDataPairs(b.game_data).length);
+  return gameBlock ? gameDataPairs(gameBlock.game_data) : [];
+}
+
+function glossarize(text, pairs) {
+  const escaped = escapeHtml(text);
+  const terms = (pairs || []).filter(p => p.term);
+  if (!terms.length) return escaped;
+  const sorted  = terms.slice().sort((a, b) => b.term.length - a.term.length);
+  const pattern = new RegExp(sorted.map(p => escapeRegex(escapeHtml(p.term))).join('|'), 'g');
+  const used = new Set();
+  return escaped.replace(pattern, (match) => {
+    const pair = sorted.find(p => escapeHtml(p.term) === match);
+    if (!pair || used.has(pair.term)) return match;
+    used.add(pair.term);
+    return `<span class="gloss-wrap">${match}<span class="gloss-icon" tabindex="0">ⓘ<span class="gloss-tip">${escapeHtml(pair.definition || '')}</span></span></span>`;
+  });
+}
+
+// ========== מצב מצגת ==========
+
+let presentUnit = null;
+let presentIdx  = 0;
+const presentGameStates = {};
+
+function openPresentation(idx) {
+  presentUnit = allUnits[idx];
+  if (!presentUnit.blocks || !presentUnit.blocks.length) { alert('ליחידה זו אין עדיין בלוקים להציג.'); return; }
+  presentIdx = 0;
+  document.getElementById('presentUnitName').textContent = presentUnit.unit_name;
+  document.getElementById('presentOverlay').classList.add('show');
+  document.addEventListener('keydown', presentKeyHandler);
+  renderPresentSlide();
+  callAPI('trackUnitPresented', { unit_id: presentUnit.unit_id }).catch(() => {});
+}
+
+function closePresentation() {
+  document.getElementById('presentOverlay').classList.remove('show');
+  document.removeEventListener('keydown', presentKeyHandler);
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+function presentKeyHandler(e) {
+  if (e.key === 'Escape') closePresentation();
+  if (e.key === 'ArrowLeft') presentNav(1);
+  if (e.key === 'ArrowRight') presentNav(-1);
+}
+
+function togglePresentFullscreen() {
+  const el = document.getElementById('presentOverlay');
+  if (!document.fullscreenElement) el.requestFullscreen().catch(() => {});
+  else document.exitFullscreen().catch(() => {});
+}
+
+function presentNav(dir) {
+  const blocks = presentUnit.blocks || [];
+  const next = presentIdx + dir;
+  if (next < 0 || next >= blocks.length) return;
+  presentIdx = next;
+  renderPresentSlide();
+}
+
+function renderPresentSlide() {
+  const blocks = presentUnit.blocks || [];
+  const block  = blocks[presentIdx];
+  const stage  = document.getElementById('presentSlide');
+  const glossary = getGlossaryForLesson(presentUnit);
+
+  document.getElementById('presentCounter').textContent = (presentIdx + 1) + ' / ' + blocks.length;
+  document.getElementById('presentPrevBtn').disabled = presentIdx === 0;
+  document.getElementById('presentNextBtn').disabled = presentIdx === blocks.length - 1;
+
+  if (block.block_type === 'teach') {
+    const media = block.media_type === 'video' && block.media_url
+      ? `<div class="present-embed"><iframe src="${block.media_url}" allowfullscreen></iframe></div>`
+      : (block.media_type === 'image' && block.media_url ? `<img src="${block.media_url}" />` : '');
+    stage.innerHTML = `
+      <div class="present-slide-title">📖 ${escapeHtml(block.title)}</div>
+      <div class="present-slide-media">${media}</div>
+      <div class="present-slide-body">${glossarize(block.body, glossary)}</div>
+    `;
+  } else if (block.block_type === 'question') {
+    stage.innerHTML = `
+      <div class="present-question-tag">🎯 שאלה אישית — כל קבוצה עונה בעצמה בעמוד שלה</div>
+      <div class="present-slide-title">${escapeHtml(block.title || '')}</div>
+      <div class="present-slide-body">${glossarize(block.question_prompt, glossary)}</div>
+    `;
+  } else if (block.block_type === 'question_structured') {
+    const sq = block.game_data || {};
+    stage.innerHTML = `
+      <div class="present-question-tag">📝 שאלה אישית מובנית — כל קבוצה עונה בעצמה בעמוד שלה</div>
+      <div class="present-slide-title">${escapeHtml(block.title || '')}</div>
+      <div class="present-slide-body">${glossarize(block.question_prompt, glossary)}</div>
+      ${(sq.categories || []).length ? `<div class="present-slide-body" style="font-size:16px;margin-top:12px;">${sq.categories.map(c => '• ' + escapeHtml(c)).join('<br>')}</div>` : ''}
+    `;
+  } else if (block.block_type === 'quiz') {
+    const q = block.game_data || {};
+    const answerHtml = q.mode === 'classify'
+      ? (q.items || []).map((item, i) => `<div>${escapeHtml(item)} ← ${escapeHtml((q.categories||[])[(q.correctMap||[])[i]] || '')}</div>`).join('')
+      : (q.options || []).map((o,i) => (q.correct||[]).includes(i) ? `<div>✅ ${escapeHtml(o)}</div>` : `<div>◻️ ${escapeHtml(o)}</div>`).join('');
+    stage.innerHTML = `
+      <div class="present-question-tag">✅ בדיקת הבנה קצרה</div>
+      <div class="present-slide-title">${escapeHtml(block.title || '')}</div>
+      <div class="present-slide-body">${glossarize(block.question_prompt, glossary)}</div>
+      <div class="present-slide-body" style="font-size:16px;margin-top:12px;">${answerHtml}</div>
+    `;
+  } else if (block.block_type === 'game') {
+    stage.innerHTML = `
+      <div class="present-slide-title">🎮 ${escapeHtml(block.title || '')}</div>
+      <div class="game-mount" id="present_game_${block.block_id}"></div>
+    `;
+    if (!presentGameStates[block.block_id]) {
+      presentGameStates[block.block_id] = block.game_type === 'memory' ? initPresentMemory(block) : initPresentFlash(block);
+    }
+    paintPresentGame(block);
+  }
+}
+
+// גרסאות מקומיות של משחקי הזיכרון/כרטיסיות למצב מצגת (מציירות לתוך present_game_<id>)
+
+function buildPresentMemoryTiles(pairs) {
+  const tiles = [];
+  pairs.forEach((p, i) => { tiles.push({ pairIdx: i, side: 'term', text: p.term }); tiles.push({ pairIdx: i, side: 'definition', text: p.definition }); });
+  for (let i = tiles.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [tiles[i], tiles[j]] = [tiles[j], tiles[i]]; }
+  return tiles;
+}
+
+function initPresentMemory(block) {
+  const pairs = gameDataPairs(block.game_data);
+  return { pairs, tiles: buildPresentMemoryTiles(pairs), matched: new Array(pairs.length * 2).fill(false), openIdx: [], busy: false };
+}
+
+function resetPresentMemory(blockId) {
+  const st = presentGameStates[blockId];
+  if (!st) return;
+  st.tiles = buildPresentMemoryTiles(st.pairs);
+  st.matched = new Array(st.tiles.length).fill(false);
+  st.openIdx = [];
+  st.busy = false;
+  paintPresentMemory(blockId);
+}
+
+function initPresentFlash(block) { return { pairs: gameDataPairs(block.game_data), idx: 0, flipped: false }; }
+
+function resetPresentFlash(blockId) {
+  const st = presentGameStates[blockId];
+  if (!st) return;
+  st.idx = 0;
+  st.flipped = false;
+  paintPresentFlash(blockId);
+}
+
+function paintPresentGame(block) {
+  if (block.game_type === 'memory') paintPresentMemory(block.block_id);
+  else paintPresentFlash(block.block_id);
+}
+
+function paintPresentMemory(blockId) {
+  const st = presentGameStates[blockId];
+  const mount = document.getElementById('present_game_' + blockId);
+  if (!st || !mount) return;
+  const solved = st.matched.filter(Boolean).length / 2;
+  const total  = st.tiles.length / 2;
+  mount.innerHTML = `
+    <div class="memory-progress">
+      <span>${solved} / ${total} זוגות נמצאו</span>
+      <button class="game-reset-btn" onclick="resetPresentMemory('${blockId}')">🔄 התחל מחדש</button>
+    </div>
+    <div class="memory-grid">
+      ${st.tiles.map((t, i) => {
+        const open = st.matched[i] || st.openIdx.includes(i);
+        return `<div class="memory-tile ${open?'open':''} ${st.matched[i]?'matched':''}" onclick="clickPresentMemoryTile('${blockId}',${i})">${open ? escapeHtml(t.text) : '?'}</div>`;
+      }).join('')}
+    </div>
+    ${solved === total && total > 0 ? '<div class="memory-win">🎉 כל הזוגות נמצאו!</div>' : ''}
+  `;
+}
+
+function clickPresentMemoryTile(blockId, i) {
+  const st = presentGameStates[blockId];
+  if (!st || st.busy || st.matched[i] || st.openIdx.includes(i)) return;
+  st.openIdx.push(i);
+  if (st.openIdx.length === 2) {
+    st.busy = true;
+    paintPresentMemory(blockId);
+    const [a, b] = st.openIdx;
+    const isMatch = st.tiles[a].pairIdx === st.tiles[b].pairIdx && st.tiles[a].side !== st.tiles[b].side;
+    setTimeout(() => {
+      if (isMatch) { st.matched[a] = true; st.matched[b] = true; }
+      st.openIdx = [];
+      st.busy = false;
+      paintPresentMemory(blockId);
+    }, isMatch ? 500 : 1000);
+  } else {
+    paintPresentMemory(blockId);
+  }
+}
+
+function paintPresentFlash(blockId) {
+  const st = presentGameStates[blockId];
+  const mount = document.getElementById('present_game_' + blockId);
+  if (!st || !mount) return;
+  const p = st.pairs[st.idx] || { term: '', definition: '' };
+  mount.innerHTML = `
+    <div class="fc-progress">
+      <span>${st.pairs.length ? st.idx + 1 : 0} / ${st.pairs.length}</span>
+      <button class="game-reset-btn" onclick="resetPresentFlash('${blockId}')">🔄 התחל מחדש</button>
+    </div>
+    <div class="fc-card ${st.flipped?'flipped':''}" onclick="flipPresentFlash('${blockId}')">
+      <div class="fc-face fc-front">${escapeHtml(p.term)}</div>
+      <div class="fc-face fc-back">${escapeHtml(p.definition)}</div>
+    </div>
+    <div class="fc-hint">לחצו כדי לראות את התשובה</div>
+    <div class="fc-controls">
+      <button class="btn-nav btn-prev" onclick="navPresentFlash('${blockId}',-1)">→ קודם</button>
+      <button class="btn-nav btn-next" onclick="navPresentFlash('${blockId}',1)">הבא ←</button>
+    </div>
+  `;
+}
+
+function flipPresentFlash(blockId) { const st = presentGameStates[blockId]; st.flipped = !st.flipped; paintPresentFlash(blockId); }
+
+function navPresentFlash(blockId, dir) {
+  const st = presentGameStates[blockId];
+  if (!st.pairs.length) return;
+  st.idx = (st.idx + dir + st.pairs.length) % st.pairs.length;
+  st.flipped = false;
+  paintPresentFlash(blockId);
+}
+</script>
+</body>
+</html>
