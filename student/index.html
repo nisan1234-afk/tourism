@@ -625,11 +625,8 @@ async function callAPI(action, params = {}) {
 
 async function loadGroupData() {
   try {
-    const dashData = await callAPI('getTeacherDashboard');
-    const groups   = dashData.groups || [];
-    const email    = currentUser.email;
-    const myGroup  = groups.find(g => (g.members || []).some(m => m.toLowerCase() === email.toLowerCase()));
-    if (!myGroup) throw new Error('לא שויכת לקבוצה');
+    const myGroupData = await callAPI('getMyStudentGroup');
+    const myGroup      = myGroupData.group;
 
     const detail = await callAPI('getGroupData', { group_id: myGroup.group_id });
     groupData = { ...myGroup, ...detail.group };
