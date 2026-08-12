@@ -628,19 +628,21 @@ async function loadGroupData() {
     const myGroupData = await callAPI('getMyStudentGroup');
     const myGroup      = myGroupData.group;
 
-    const detail = await callAPI('getGroupData', { group_id: myGroup.group_id });
+    // getGroupData ו-getGroupLessons לא תלויות זו בזו (שתיהן צריכות רק את
+    // group_id שכבר יש לנו) — מריצים במקביל במקום ברצף כדי לחסוך זמן טעינה.
+    const [detail, lessonsData] = await Promise.all([
+      callAPI('getGroupData', { group_id: myGroup.group_id }),
+      callAPI('getGroupLessons', { group_id: myGroup.group_id }).catch(() => ({ lessons: [] }))
+    ]);
     groupData = { ...myGroup, ...detail.group };
     sectionContent   = detail.sections || {};
     teacherEdits     = detail.teacherEdits || {};
     sectionComments  = detail.comments || {};
     updateScoreBadge(detail.total_score || 0);
 
-    // טוען גם את היחידות מראש (לא רק כשפותחים את "השיעורים שלי") — כדי שתשובות
-    // לשאלות אישיות מיחידות יוכלו להופיע ישירות בתוך עמוד הסעיף הרלוונטי
-    try {
-      const lessonsData = await callAPI('getGroupLessons', { group_id: myGroup.group_id });
-      allLessons = lessonsData.lessons || [];
-    } catch (e) { allLessons = []; }
+    // נטענות מראש (לא רק כשפותחים את "השיעורים שלי") — כדי שתשובות לשאלות
+    // אישיות מיחידות יוכלו להופיע ישירות בתוך עמוד הסעיף הרלוונטי
+    allLessons = lessonsData.lessons || [];
 
     // חברי הקבוצה מלבדי
     const others = (groupData.members || []).filter(m => m.toLowerCase() !== email.toLowerCase());
