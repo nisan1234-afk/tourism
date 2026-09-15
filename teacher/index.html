@@ -404,6 +404,7 @@
         <div class="card-title">יחידות לימוד</div>
         <button class="btn-sm btn-primary" onclick="showModal('addUnitModal')">+ יחידה חדשה</button>
       </div>
+      <div class="form-hint" style="margin:-8px 0 14px;">שימו לב: המתג "פתוח/סגור" עדיין לא מסתיר יחידות מהתלמידים (הנעילה כבויה לפי בקשתכם). כל היחידות גלויות להם תמיד.</div>
       <div class="units-grid" id="unitsGrid">
         <div class="empty-state">טוען יחידות...</div>
       </div>
@@ -826,16 +827,43 @@ let currentGroupId     = null;
 
 window.onload = async function() {
   const stored = sessionStorage.getItem('kitahUser');
-  if (!stored) { window.location.href = TICHER_URL; return; }
+  if (!stored) { goToLogin(); return; }
   currentUser = JSON.parse(stored);
+  if (isTokenExpired(currentUser.token)) { goToLogin(); return; }
   document.getElementById('userName').textContent = currentUser.name || currentUser.email.split('@')[0];
   await loadData();
 };
 
+/** טוקן Google תקף כשעה. בודקים לפני כל קריאה, אחרת כל פעולה נכשלת ב"אימות נכשל" בלי הסבר. */
+function isTokenExpired(token) {
+  try {
+    const part = String(token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(part));
+    return !payload.exp || Date.now() / 1000 > payload.exp - 30;
+  } catch (e) { return true; }
+}
+
+/** חזרה לדף הכניסה עם כתובת חזרה (דף הכניסה תומך ב-?return=). */
+function goToLogin() {
+  sessionStorage.removeItem('kitahUser');
+  window.location.href = TICHER_URL + '?return=' + encodeURIComponent(location.pathname + location.search);
+}
+
+/** רק קישורי http/https נכנסים ל-href/src; כל דבר אחר (למשל javascript:) נזרק. */
+function safeUrl(u) {
+  return /^https?:\/\//i.test(String(u || '').trim()) ? escapeHtml(String(u).trim()) : '';
+}
+
 async function callAPI(action, params = {}) {
+  if (isTokenExpired(currentUser.token)) { goToLogin(); throw new Error('פג תוקף הכניסה, מתחברים מחדש...'); }
   const res  = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, token: currentUser.token, ...params }) });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error);
+  let data;
+  try { data = await res.json(); }
+  catch (e) { throw new Error('השרת החזיר תשובה לא תקינה. נסו שוב בעוד רגע.'); }
+  if (!data.ok) {
+    if (/אימות נכשל|token/i.test(data.error || '')) goToLogin();
+    throw new Error(data.error || 'שגיאה לא ידועה');
+  }
   return data.data;
 }
 
@@ -851,7 +879,7 @@ async function loadData() {
     renderClasses();
     renderContinueGroupBar();
   } catch(e) {
-    document.getElementById('groupsBody').innerHTML = '<tr><td colspan="8" class="empty-state">שגיאה: ' + e.message + '</td></tr>';
+    document.getElementById('groupsBody').innerHTML = '<tr><td colspan="8" class="empty-state">שגיאה: ' + escapeHtml(e.message) + '</td></tr>';
   }
   loadFindings();
 }
@@ -864,7 +892,7 @@ async function loadFindings() {
     allFindings = data.findings || [];
     renderFindings();
   } catch(e) {
-    document.getElementById('findingsBody').innerHTML = '<div class="empty-state">שגיאה: ' + e.message + '</div>';
+    document.getElementById('findingsBody').innerHTML = '<div class="empty-state">שגיאה: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
@@ -973,14 +1001,16 @@ function renderGroupRow(g) {
       return `<div class="sec-dot ${cls}" title="סעיף ${n}: ${SECTION_NAMES[n]}">${txt}</div>`;
     }).join('');
 
+    // שם האתר והקישור מגיעים מהתלמידים, לכן חייבים סינון: בלי זה תלמיד יכול להריץ קוד בדפדפן של המורה
     const members = g.members || [];
     const c = g.contribution || {};
     const contrib = `<div class="contrib-wrap">
-      ${members.map(m => `<span class="contrib-pill pill-member">${m.split('@')[0]}:${c[m]||0}%</span>`).join('')}
-      <span class="contrib-pill pill-pair">ביחד:${c.pair||0}%</span>
+      ${members.map(m => `<span class="contrib-pill pill-member">${escapeHtml(String(m).split('@')[0])}:${Number(c[m])||0}%</span>`).join('')}
+      <span class="contrib-pill pill-pair">ביחד:${Number(c.pair)||0}%</span>
     </div>`;
 
-    const membersHtml = `<div class="members-wrap">${members.map(m => `<span class="member-email">${m}</span>`).join('') || '—'}</div>`;
+    const membersHtml = `<div class="members-wrap">${members.map(m => `<span class="member-email">${escapeHtml(m)}</span>`).join('') || '—'}</div>`;
+    const siteLink = safeUrl(g.site_url);
 
     const diff = g.last_active ? Date.now() - new Date(g.last_active).getTime() : Infinity;
     const days = Math.floor(diff / 86400000);
@@ -990,8 +1020,8 @@ function renderGroupRow(g) {
     const laCls  = !g.last_active ? 'la-none' : days > 7 ? 'la-old' : days > 2 ? 'la-mid' : 'la-recent';
 
     return `<tr>
-      <td><strong>${g.group_name || g.group_id}</strong></td>
-      <td>${g.site_name || '—'}${g.site_url ? '<br><a href="'+g.site_url+'" target="_blank" style="font-size:11px;color:var(--blue-light);">🔗 קישור</a>' : ''}</td>
+      <td><strong>${escapeHtml(g.group_name || g.group_id)}</strong></td>
+      <td>${escapeHtml(g.site_name || '—')}${siteLink ? '<br><a href="'+siteLink+'" target="_blank" rel="noopener" style="font-size:11px;color:var(--blue-light);">🔗 קישור</a>' : ''}</td>
       <td>${membersHtml}</td>
       <td><div class="sections-mini">${dots}</div></td>
       <td>${prog}</td>
@@ -1007,10 +1037,11 @@ function renderGroupRow(g) {
 function filterGroups(q) {
   const status = document.getElementById('filterStatus').value;
   let filtered = allGroups;
-  if (q) filtered = filtered.filter(g =>
-    (g.site_name||'').includes(q) ||
-    (g.group_name||'').includes(q) ||
-    (g.members||[]).some(m => m.includes(q))
+  const needle = String(q || '').trim().toLowerCase();
+  if (needle) filtered = filtered.filter(g =>
+    String(g.site_name||'').toLowerCase().includes(needle) ||
+    String(g.group_name||'').toLowerCase().includes(needle) ||
+    (g.members||[]).some(m => String(m).toLowerCase().includes(needle))
   );
   if (status === 'done')   filtered = filtered.filter(g => g.percent === 100);
   if (status === 'stuck')  filtered = filtered.filter(g => { const d = g.last_active ? (Date.now()-new Date(g.last_active).getTime())/86400000 : 999; return d > 7; });
@@ -1088,21 +1119,21 @@ async function openGroupModal(group_id) {
           <span id="editGroupStatus" style="font-size:12px;color:var(--muted);"></span>
         </div>
       </div>
-      ${group.site_url ? '<a href="'+group.site_url+'" target="_blank" style="color:var(--blue-light);font-size:13px;display:block;margin-bottom:14px;">🔗 '+group.site_url+'</a>' : ''}
+      ${safeUrl(group.site_url) ? '<a href="'+safeUrl(group.site_url)+'" target="_blank" rel="noopener" style="color:var(--blue-light);font-size:13px;display:block;margin-bottom:14px;">🔗 '+escapeHtml(group.site_url)+'</a>' : ''}
       <div class="sections-detail">${secCells}</div>
       <div style="margin-top:16px;padding:14px;background:var(--dark3);border-radius:10px;">
         <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;">תרומה לפרויקט</div>
         <div class="contrib-wrap">
-          ${members.map(m => `<span class="contrib-pill pill-member" style="font-size:12px;padding:4px 10px;">${m} (solo): ${c[m]||0}%</span>`).join('')}
-          <span class="contrib-pill pill-pair" style="font-size:12px;padding:4px 10px;">ביחד: ${c.pair||0}%</span>
+          ${members.map(m => `<span class="contrib-pill pill-member" style="font-size:12px;padding:4px 10px;">${escapeHtml(m)} (solo): ${Number(c[m])||0}%</span>`).join('')}
+          <span class="contrib-pill pill-pair" style="font-size:12px;padding:4px 10px;">ביחד: ${Number(c.pair)||0}%</span>
         </div>
       </div>
       <div style="margin-top:16px;">
         <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;">חברי הקבוצה</div>
         <div id="memberList">${members.map(m => `
           <div class="member-row">
-            <span class="member-row-email">${m}</span>
-            <button class="member-remove" onclick="removeMember('${group_id}','${m}')">✕ הסר</button>
+            <span class="member-row-email">${escapeHtml(m)}</span>
+            <button class="member-remove" onclick="removeMember('${escapeHtml(group_id)}','${escapeHtml(m)}')">✕ הסר</button>
           </div>`).join('')}</div>
         <div class="add-member-row">
           <input type="email" id="newMemberEmail" placeholder="מייל תלמיד חדש" />
@@ -1132,7 +1163,7 @@ async function openGroupModal(group_id) {
     loadGroupLessonAnswers(group_id);
     loadGroupChatLog(group_id);
   } catch(e) {
-    document.getElementById('groupModalContent').innerHTML = '<div class="empty-state">שגיאה: ' + e.message + '</div>';
+    document.getElementById('groupModalContent').innerHTML = '<div class="empty-state">שגיאה: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
@@ -1287,12 +1318,13 @@ function renderUnits() {
   if (!allUnits.length) { grid.innerHTML = '<div class="empty-state">אין יחידות — צור יחידה חדשה</div>'; return; }
   grid.innerHTML = allUnits.map((u, i) => {
     const isOpen = u.is_open === 'TRUE' || u.is_open === true;
-    const lessonBadge = u.lesson_num ? `<span style="font-size:10px;color:var(--muted);">יחידה ${u.lesson_num} · </span>` : '';
-    const summaryPreview = u.summary ? `<div style="font-size:11px;color:var(--muted);margin:6px 0;line-height:1.5;">${u.summary.slice(0,120)}${u.summary.length>120?'…':''}</div>` : '';
-    const monthBadge = u.planned_month ? `<span class="badge badge-blue" style="margin-bottom:8px;">📅 ${u.planned_month}</span>` : '';
+    const summary = String(u.summary || '');
+    const lessonBadge = u.lesson_num ? `<span style="font-size:10px;color:var(--muted);">יחידה ${escapeHtml(u.lesson_num)} · </span>` : '';
+    const summaryPreview = summary ? `<div style="font-size:11px;color:var(--muted);margin:6px 0;line-height:1.5;">${escapeHtml(summary.slice(0,120))}${summary.length>120?'…':''}</div>` : '';
+    const monthBadge = u.planned_month ? `<span class="badge badge-blue" style="margin-bottom:8px;">📅 ${escapeHtml(u.planned_month)}</span>` : '';
     return `<div class="unit-card ${isOpen?'open':''}">
-      <div class="unit-name">${lessonBadge}${u.unit_name}</div>
-      <div class="unit-meta">${SECTION_ICONS[u.section_linked]||''} סעיף ${u.section_linked} — ${SECTION_NAMES[u.section_linked]||''}</div>
+      <div class="unit-name">${lessonBadge}${escapeHtml(u.unit_name)}</div>
+      <div class="unit-meta">${SECTION_ICONS[u.section_linked]||''} סעיף ${escapeHtml(u.section_linked)} — ${SECTION_NAMES[u.section_linked]||''}</div>
       ${monthBadge}
       ${summaryPreview}
       <div class="unit-toggle">
@@ -1678,7 +1710,8 @@ function openAddGroupModal() {
 
 async function addGroup() {
   const name    = document.getElementById('groupName').value.trim();
-  const members = document.getElementById('groupMembers').value.trim();
+  // מורים מדביקים מיילים גם עם שורות חדשות / נקודה-פסיק / רווחים; השרת מפריד רק בפסיק
+  const members = document.getElementById('groupMembers').value.split(/[\s,;]+/).map(m => m.trim()).filter(Boolean).join(',');
   const cls     = document.getElementById('groupClass').value;
   const resEl   = document.getElementById('addGroupResult');
   const btn     = document.getElementById('addGroupConfirmBtn');
@@ -1961,9 +1994,10 @@ function renderPresentSlide() {
   document.getElementById('presentNextBtn').disabled = presentIdx === blocks.length - 1;
 
   if (block.block_type === 'teach') {
-    const media = block.media_type === 'video' && block.media_url
-      ? `<div class="present-embed"><iframe src="${block.media_url}" allowfullscreen></iframe></div>`
-      : (block.media_type === 'image' && block.media_url ? `<img src="${block.media_url}" />` : '');
+    const mediaUrl = safeUrl(block.media_url);
+    const media = block.media_type === 'video' && mediaUrl
+      ? `<div class="present-embed"><iframe src="${mediaUrl}" allowfullscreen></iframe></div>`
+      : (block.media_type === 'image' && mediaUrl ? `<img src="${mediaUrl}" />` : '');
     stage.innerHTML = `
       <div class="present-slide-title">📖 ${escapeHtml(block.title)}</div>
       <div class="present-slide-media">${media}</div>

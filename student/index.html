@@ -598,11 +598,13 @@ let lastUnitId     = '';
 const gameStates   = {};
 let teacherEdits    = {};
 let sectionComments = {};
+let lastServerUpdate = '';
 
 window.onload = async function() {
   const stored = sessionStorage.getItem('kitahUser');
-  if (!stored) { window.location.href = TICHER_URL; return; }
+  if (!stored) { goToLogin(); return; }
   currentUser = JSON.parse(stored);
+  if (isTokenExpired(currentUser.token)) { goToLogin(); return; }
 
   await loadGroupData();
   maybeShowNotifyBanner();
@@ -612,16 +614,111 @@ window.onload = async function() {
     sessionStorage.removeItem('jumpToSection');
     navigateTo(parseInt(jumpTo, 10));
   } else {
-    showLessonsIndex(); // השיעורים הם התצוגה הראשונה שהתלמיד רואה, כמו אצל המורה
+    showLessonsIndex(false); // השיעורים הם התצוגה הראשונה שהתלמיד רואה; כבר נטענו ב-loadGroupData, אין צורך לקרוא שוב
   }
 };
 
+/**
+ * טוקן Google תקף כשעה. עד עכשיו רק דף הכניסה בדק את זה, ותלמיד שעבד יותר משעה
+ * ראה "שגיאה בשמירה" בלי הסבר ובלי דרך להתחבר מחדש. עכשיו בודקים לפני כל קריאה.
+ */
+function isTokenExpired(token) {
+  try {
+    const part = String(token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(part));
+    return !payload.exp || Date.now() / 1000 > payload.exp - 30;
+  } catch (e) { return true; }
+}
+
+/** חזרה לדף הכניסה עם כתובת חזרה, כך שאחרי כניסה מחדש נוחתים שוב כאן (דף הכניסה תומך ב-?return=). */
+function goToLogin() {
+  sessionStorage.removeItem('kitahUser');
+  window.location.href = TICHER_URL + '?return=' + encodeURIComponent(location.pathname + location.search);
+}
+
 async function callAPI(action, params = {}) {
+  if (isTokenExpired(currentUser.token)) {
+    saveDraft(currentSection);
+    goToLogin();
+    throw new Error('פג תוקף הכניסה, מתחברים מחדש...');
+  }
   const res  = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, token: currentUser.token, ...params }) });
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error);
+  let data;
+  try { data = await res.json(); }
+  catch (e) { throw new Error('השרת החזיר תשובה לא תקינה. נסו שוב בעוד רגע.'); }
+  if (!data.ok) {
+    if (/אימות נכשל|token/i.test(data.error || '')) { saveDraft(currentSection); goToLogin(); }
+    throw new Error(data.error || 'שגיאה לא ידועה');
+  }
   return data.data;
 }
+
+// ========== טיוטה מקומית + "סעיף מולא" ==========
+// הטיוטה נשמרת ב-localStorage בכל הקלדה, ומשוחזרת אם הדף נסגר / הטוקן פג לפני שהשמירה לשרת הצליחה.
+
+function draftKey(secNum) { return 'td:draft:' + (groupData ? groupData.group_id : '') + ':' + secNum; }
+
+function readSectionFields(secNum) {
+  const sec = SECTIONS[secNum - 1];
+  if (!sec) return null;
+  const data = {};
+  let found = false;
+  sec.fields.forEach(f => {
+    const el = document.getElementById('field_' + f.id);
+    if (el) { data[f.id] = el.value; found = true; }
+  });
+  return found ? data : null;
+}
+
+function saveDraft(secNum, data) {
+  if (!groupData) return;
+  const payload = data || readSectionFields(secNum);
+  if (!payload) return;
+  try { localStorage.setItem(draftKey(secNum), JSON.stringify({ data: payload, ts: Date.now() })); } catch (e) {}
+}
+
+function loadDraft(secNum) {
+  try {
+    const raw = localStorage.getItem(draftKey(secNum));
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || !d.data) return null;
+    // הטיוטה זהה למה שבשרת, או שבן/בת הזוג כבר עדכנו את הפרויקט אחריה ממכשיר אחר: מוותרים עליה
+    const serverTs = lastServerUpdate ? new Date(lastServerUpdate).getTime() : 0;
+    if (JSON.stringify(d.data) === (sectionContent['section_' + secNum] || '') || (serverTs && serverTs > d.ts)) {
+      localStorage.removeItem(draftKey(secNum));
+      return null;
+    }
+    return d.data;
+  } catch (e) { return null; }
+}
+
+function clearDraft(secNum) { try { localStorage.removeItem(draftKey(secNum)); } catch (e) {} }
+
+function parseSectionData(json) {
+  try { const v = JSON.parse(json || ''); return v && typeof v === 'object' ? v : {}; }
+  catch (e) { return {}; }
+}
+
+/** סעיף נחשב "מולא" רק אם לפחות שדה אחד בו אינו ריק, לא רק כי נשמרה מחרוזת JSON כלשהי. */
+function isSectionFilled(json) {
+  return Object.values(parseSectionData(json)).some(v => String(v == null ? '' : v).trim() !== '');
+}
+
+window.addEventListener('beforeunload', function (e) {
+  if (!hasChanges) return;
+  saveDraft(currentSection);
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'hidden' && hasChanges) {
+    clearTimeout(saveTimer);
+    saveDraft(currentSection);
+    saveSection(true);
+  }
+});
 
 async function loadGroupData() {
   try {
@@ -638,29 +735,32 @@ async function loadGroupData() {
     sectionContent   = detail.sections || {};
     teacherEdits     = detail.teacherEdits || {};
     sectionComments  = detail.comments || {};
+    lastServerUpdate = detail.last_updated || '';
     updateScoreBadge(detail.total_score || 0);
 
     // נטענות מראש (לא רק כשפותחים את "השיעורים שלי") — כדי שתשובות לשאלות
     // אישיות מיחידות יוכלו להופיע ישירות בתוך עמוד הסעיף הרלוונטי
     allLessons = lessonsData.lessons || [];
+    lastUnitId = lessonsData.last_unit_id || '';
 
-    // חברי הקבוצה מלבדי
-    const others = (groupData.members || []).filter(m => m.toLowerCase() !== email.toLowerCase());
+    // חברי הקבוצה מלבדי (המייל שלי מגיע מהפרופיל שנשמר בכניסה)
+    const myEmail = String(currentUser.email || '').trim().toLowerCase();
+    const others = (groupData.members || []).filter(m => String(m).trim().toLowerCase() !== myEmail);
     document.getElementById('partnerLabel').textContent = others.length
-      ? 'חברי הקבוצה: ' + others.map(m => m.split('@')[0]).join(', ')
+      ? 'חברי הקבוצה: ' + others.map(m => String(m).split('@')[0]).join(', ')
       : 'עובד/ת לבד בקבוצה זו';
 
     renderSectionNav();
     updateProgress();
   } catch(e) {
-    document.getElementById('sectionContent').innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);">שגיאה: ' + e.message + '</div>';
+    document.getElementById('sectionContent').innerHTML = '<div style="text-align:center;padding:60px;color:var(--muted);">שגיאה: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
 function renderSectionNav() {
   const nav = document.getElementById('sectionNav');
   nav.innerHTML = SECTIONS.map(s => {
-    const isDone    = sectionContent['section_'+s.num] ? true : false;
+    const isDone    = isSectionFilled(sectionContent['section_'+s.num]);
     const isCurrent = s.num === currentSection;
     const isLocked  = false; // נעילת סעיפים כבויה לפי בקשת המורה — כל הסעיפים פתוחים תמיד
     const cls = isLocked ? 'locked' : isDone ? 'done' : '';
@@ -679,14 +779,18 @@ function renderSectionNav() {
 }
 
 function navigateTo(num) {
-  if (hasChanges) { saveSection(); }
+  // בלי זה טיימר השמירה האוטומטית היה שומר את הסעיף *החדש* (ריק) כמה שניות אחרי המעבר,
+  // ומסמן אותו כ"הושלם". השמירה של הסעיף שעוזבים מקבלת את מספרו במפורש.
+  clearTimeout(saveTimer);
+  if (hasChanges) { saveSection(false, currentSection); }
   currentSection = num;
   sessionStorage.setItem('currentSection', num);
 
   const sec = SECTIONS[num - 1];
-  const saved = sectionContent['section_'+num] || '';
-  let savedData = {};
-  try { savedData = JSON.parse(saved); } catch(e) { savedData = {}; }
+  let savedData = parseSectionData(sectionContent['section_'+num]);
+  // טיוטה מקומית שלא הספיקה להישמר (סגירת דף, פקיעת טוקן) גוברת על מה שבשרת
+  const draft = loadDraft(num);
+  if (draft) savedData = draft;
 
   const fieldTeacherEdits = teacherEdits['section_' + num] || {};
 
@@ -698,8 +802,8 @@ function navigateTo(num) {
     <div class="field-group">
       <div class="field-label">${f.label} <span class="field-required">*</span></div>
       ${f.type === 'textarea'
-        ? `<textarea class="field-textarea" id="field_${f.id}" rows="5" oninput="onFieldChange()" placeholder="${f.hint||''}">${savedData[f.id]||''}</textarea>`
-        : `<input class="field-input" id="field_${f.id}" type="text" oninput="onFieldChange()" placeholder="${f.hint||''}" value="${savedData[f.id]||''}" />`
+        ? `<textarea class="field-textarea" id="field_${f.id}" rows="5" oninput="onFieldChange()" placeholder="${escapeHtml(f.hint||'')}">${escapeHtml(savedData[f.id]||'')}</textarea>`
+        : `<input class="field-input" id="field_${f.id}" type="text" oninput="onFieldChange()" placeholder="${escapeHtml(f.hint||'')}" value="${escapeHtml(savedData[f.id]||'')}" />`
       }
       ${f.hint ? `<div class="field-hint">💡 ${f.hint}</div>` : ''}
       ${teacherNote}
@@ -717,8 +821,8 @@ function navigateTo(num) {
   const siteHTML = num === 1 ? `
     <div class="field-group" style="padding:16px;background:var(--dark2);border:1px solid rgba(27,42,61,0.08);border-radius:12px;">
       <div class="field-label">🗺️ האתר שבחרתם</div>
-      <input class="field-input" id="siteNameInput" type="text" placeholder="שם אתר התיירות" value="${groupData.site_name || ''}" style="margin-bottom:8px;" />
-      <input class="field-input" id="siteUrlInput" type="text" placeholder="קישור לאתר/עמוד (אופציונלי)" value="${groupData.site_url || ''}" />
+      <input class="field-input" id="siteNameInput" type="text" placeholder="שם אתר התיירות" value="${escapeHtml(groupData.site_name || '')}" style="margin-bottom:8px;" />
+      <input class="field-input" id="siteUrlInput" type="text" placeholder="קישור לאתר/עמוד (אופציונלי)" value="${escapeHtml(groupData.site_url || '')}" />
       <button class="btn-nav btn-next" style="margin-top:10px;" onclick="proposeSite()">בדוק והגדר אתר</button>
       <div id="siteFeedback" style="margin-top:10px;font-size:13px;color:var(--muted);"></div>
     </div>
@@ -747,7 +851,12 @@ function navigateTo(num) {
   `;
 
   document.getElementById('saveBtn').classList.toggle('show', !isLocked);
-  hasChanges = false;
+  hasChanges = !!draft;
+  if (draft) {
+    const st = document.getElementById('saveStatus');
+    if (st) { st.textContent = 'שוחזרה טיוטה שלא נשמרה, שומר...'; st.className = 'save-status saving'; }
+    saveTimer = setTimeout(() => saveSection(true), 1500);
+  }
   renderSectionNav();
 }
 
@@ -803,40 +912,58 @@ async function proposeSite() {
 
 function onFieldChange() {
   hasChanges = true;
+  saveDraft(currentSection);
   const status = document.getElementById('saveStatus');
   if (status) { status.textContent = 'שינויים לא נשמרו'; status.className = 'save-status'; }
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => saveSection(true), 3000); // שמירה אוטומטית אחרי 3 שניות
 }
 
-async function saveSection(auto = false) {
+/**
+ * secNum מתקבל במפורש ולא נקרא מ-currentSection אחרי ה-await: navigateTo קורא לשמירה
+ * ומיד מחליף סעיף, ובעבר התוצאה נרשמה מקומית תחת הסעיף החדש (והסעיף שעזבו נראה "לא נשמר").
+ */
+async function saveSection(auto = false, secNum = currentSection) {
   if (!groupData) return;
-  const sec = SECTIONS[currentSection - 1];
-  const wasDone = !!sectionContent['section_' + currentSection];
-  const data = {};
-  sec.fields.forEach(f => {
-    const el = document.getElementById('field_' + f.id);
-    if (el) data[f.id] = el.value;
-  });
+  const sec = SECTIONS[secNum - 1];
+  if (!sec) return;
+  const data = readSectionFields(secNum);
+  if (!data) return; // השדות של הסעיף הזה כבר לא על המסך
+  const content = JSON.stringify(data);
+  const wasDone = isSectionFilled(sectionContent['section_' + secNum]);
 
-  const status = document.getElementById('saveStatus');
+  // אין שינוי אמיתי מול השרת: לא שולחים (כל שמירה מוסיפה שורה ל-activity_log בשרת)
+  if (content === (sectionContent['section_' + secNum] || '')) {
+    clearDraft(secNum);
+    if (secNum === currentSection) hasChanges = false;
+    return;
+  }
+
+  const status = secNum === currentSection ? document.getElementById('saveStatus') : null;
   if (status) { status.textContent = 'שומר...'; status.className = 'save-status saving'; }
 
   try {
     await callAPI('saveSection', {
       group_id:     groupData.group_id,
-      section_num:  currentSection,
-      content:      JSON.stringify(data),
+      section_num:  secNum,
+      content,
       device_id:    navigator.userAgent.slice(0,50)
     });
-    sectionContent['section_'+currentSection] = JSON.stringify(data);
-    hasChanges = false;
+    sectionContent['section_' + secNum] = content;
+    lastServerUpdate = new Date().toISOString();
+    clearDraft(secNum);
+    if (secNum === currentSection) hasChanges = false;
     if (status) { status.textContent = auto ? 'נשמר אוטומטית ✓' : 'נשמר ✓'; status.className = 'save-status saved'; }
     updateProgress();
     renderSectionNav();
-    if (!wasDone && sectionContent['section_' + currentSection]) stampSectionComplete(currentSection);
+    if (!wasDone && isSectionFilled(content)) stampSectionComplete(secNum);
   } catch(e) {
-    if (status) { status.textContent = 'שגיאה בשמירה'; status.className = 'save-status'; }
+    saveDraft(secNum, data);
+    if (status) { status.textContent = 'שגיאה בשמירה. הטיוטה נשמרה במכשיר, ננסה שוב בעוד רגע'; status.className = 'save-status'; }
+    if (secNum === currentSection) {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => saveSection(true), 15000);
+    }
   }
 }
 
@@ -865,7 +992,7 @@ function updateScoreBadge(total) {
 }
 
 function updateProgress() {
-  const done = Object.keys(sectionContent).filter(k => k.startsWith('section_') && sectionContent[k]).length;
+  const done = Object.keys(sectionContent).filter(k => k.startsWith('section_') && isSectionFilled(sectionContent[k])).length;
   const pct  = Math.round((done / 8) * 100);
   const fill = document.getElementById('progressFill');
   const pctEl = document.getElementById('progressPct');
@@ -925,8 +1052,13 @@ async function loadFiles() {
     filesLoaded = true;
     renderFiles(files);
   } catch(e) {
-    list.innerHTML = '<div style="color:var(--error);font-size:12px;">שגיאה: ' + e.message + '</div>';
+    list.innerHTML = '<div style="color:var(--error);font-size:12px;">שגיאה: ' + escapeHtml(e.message) + '</div>';
   }
+}
+
+/** רק קישורי http/https נכנסים ל-href; כל דבר אחר (למשל javascript:) נזרק. */
+function safeUrl(u) {
+  return /^https?:\/\//i.test(String(u || '').trim()) ? escapeHtml(String(u).trim()) : '';
 }
 
 function renderFiles(files) {
@@ -934,7 +1066,7 @@ function renderFiles(files) {
   if (!files.length) { list.innerHTML = '<div style="color:var(--muted);font-size:12px;">עדיין לא הועלו קבצים</div>'; return; }
   list.innerHTML = files.map(f => `
     <div class="file-item">
-      <a href="${f.file_url}" target="_blank" title="${f.file_name}">📄 ${f.file_name}</a>
+      <a href="${safeUrl(f.file_url) || '#'}" target="_blank" rel="noopener" title="${escapeHtml(f.file_name)}">📄 ${escapeHtml(f.file_name)}</a>
     </div>
   `).join('');
 }
@@ -1016,8 +1148,11 @@ function fileToBase64(file) {
 
 // ========== שיעורים ==========
 
-/** מציג את רשימת השיעורים בתוך תוכן העמוד (כמו סעיף) — תמיד טוען מחדש, המורה עשוי לפתוח/לסגור שיעורים בין פתיחה לפתיחה. */
-async function showLessonsIndex() {
+/**
+ * מציג את רשימת השיעורים בתוך תוכן העמוד (כמו סעיף). בלחיצה מהסיידבר טוען מחדש (המורה עשוי
+ * לערוך יחידות בין פתיחה לפתיחה); בטעינת הדף הראשונה משתמש במה ש-loadGroupData כבר הביא.
+ */
+async function showLessonsIndex(reload = true) {
   document.getElementById('sectionContent').innerHTML = `
     <div class="section-header">
       <div class="section-title">📚 השיעורים שלי</div>
@@ -1025,13 +1160,14 @@ async function showLessonsIndex() {
     </div>
     <div id="lessonsIndexBody" style="text-align:center;color:var(--muted);padding:30px;"><span class="loading-spinner"></span> טוען...</div>
   `;
+  if (!reload && allLessons.length) { renderLessonsIndex(allLessons); return; }
   try {
     const data = await callAPI('getGroupLessons', { group_id: groupData.group_id });
     allLessons  = data.lessons || [];
     lastUnitId  = data.last_unit_id || '';
     renderLessonsIndex(allLessons);
   } catch(e) {
-    document.getElementById('lessonsIndexBody').innerHTML = '<div style="color:var(--error);padding:20px;">שגיאה: ' + e.message + '</div>';
+    document.getElementById('lessonsIndexBody').innerHTML = '<div style="color:var(--error);padding:20px;">שגיאה: ' + escapeHtml(e.message) + '</div>';
   }
 }
 
@@ -1144,8 +1280,8 @@ function glossarize(text, pairs) {
 function renderLessonBlocks(lesson) {
   const glossary = getGlossaryForLesson(lesson);
   if (!lesson.blocks || !lesson.blocks.length) {
-    const imageHtml = lesson.image_url ? `<img class="lesson-teach-img" src="${lesson.image_url}" />` : '';
-    const embedHtml = lesson.embed_url ? `<div class="lesson-embed-wrap"><iframe src="${lesson.embed_url}" allowfullscreen></iframe></div>` : '';
+    const imageHtml = safeUrl(lesson.image_url) ? `<img class="lesson-teach-img" src="${safeUrl(lesson.image_url)}" />` : '';
+    const embedHtml = safeUrl(lesson.embed_url) ? `<div class="lesson-embed-wrap"><iframe src="${safeUrl(lesson.embed_url)}" allowfullscreen></iframe></div>` : '';
     return `${imageHtml}${embedHtml}
       ${lesson.summary ? `<div class="lesson-summary">${glossarize(lesson.summary, glossary)}</div>` : ''}
       ${lesson.assignment_summary ? `<div class="lesson-assignment">📝 ${glossarize(lesson.assignment_summary, glossary)}</div>` : ''}`;
@@ -1169,9 +1305,10 @@ function findBlockById(blockId) {
 }
 
 function renderTeachBlock(block, glossary) {
-  const media = block.media_type === 'video' && block.media_url
-    ? `<div class="lesson-embed-wrap"><iframe src="${block.media_url}" allowfullscreen></iframe></div>`
-    : (block.media_type === 'image' && block.media_url ? `<img class="lesson-teach-img" src="${block.media_url}" />` : '');
+  const mediaUrl = safeUrl(block.media_url);
+  const media = block.media_type === 'video' && mediaUrl
+    ? `<div class="lesson-embed-wrap"><iframe src="${mediaUrl}" allowfullscreen></iframe></div>`
+    : (block.media_type === 'image' && mediaUrl ? `<img class="lesson-teach-img" src="${mediaUrl}" />` : '');
   return `
     <div class="lesson-block lesson-block-teach">
       ${block.title ? `<div class="block-title">📖 ${escapeHtml(block.title)}</div>` : ''}
