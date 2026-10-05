@@ -607,6 +607,7 @@ window.onload = async function() {
   if (isTokenExpired(currentUser.token)) { goToLogin(); return; }
 
   await loadGroupData();
+  if (sessionStorage.getItem('kitahUser')) sessionStorage.removeItem('loginHops'); // נטען בהצלחה: מאפסים את בלם הלופ
   maybeShowNotifyBanner();
 
   const jumpTo = sessionStorage.getItem('jumpToSection');
@@ -626,13 +627,28 @@ function isTokenExpired(token) {
   try {
     const part = String(token || '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(atob(part));
-    return !payload.exp || Date.now() / 1000 > payload.exp - 30;
+    // clockSkew נשמר בכניסה (שעון המחשב פחות שעון גוגל). בלי זה, מחשב שהשעון שלו מקדים
+    // בשעה ומעלה רואה כל טוקן חדש כפג תוקף ונכנס ללופ בין דף הכניסה לכאן.
+    const skew = (currentUser && Number(currentUser.clockSkew)) || 0;
+    return !payload.exp || Date.now() / 1000 - skew > payload.exp - 30;
   } catch (e) { return true; }
 }
 
 /** חזרה לדף הכניסה עם כתובת חזרה, כך שאחרי כניסה מחדש נוחתים שוב כאן (דף הכניסה תומך ב-?return=). */
 function goToLogin() {
   sessionStorage.removeItem('kitahUser');
+  // בלם ללופ: אם כבר חזרנו לדף הכניסה 3 פעמים בתוך 2 דקות, עוצרים ומסבירים במקום להמשיך להקפיץ
+  let hops = [];
+  try { hops = JSON.parse(sessionStorage.getItem('loginHops') || '[]').filter(t => Date.now() - t < 120000); } catch (e) {}
+  if (hops.length >= 3) {
+    sessionStorage.removeItem('loginHops');
+    document.body.innerHTML = '<div dir="rtl" style="max-width:420px;margin:15vh auto;padding:24px;font-family:sans-serif;text-align:center;line-height:1.6">'
+      + '<h2>לא מצליחים להתחבר</h2><p>הכניסה נכשלה כמה פעמים ברצף. בדקו שהשעה והתאריך במחשב נכונים (הגדרות ← שעה ותאריך ← כיוון אוטומטי), ואז נסו שוב.</p>'
+      + '<p><a href="' + TICHER_URL + '">חזרה לדף הכניסה</a></p></div>';
+    return;
+  }
+  hops.push(Date.now());
+  try { sessionStorage.setItem('loginHops', JSON.stringify(hops)); } catch (e) {}
   window.location.href = TICHER_URL + '?return=' + encodeURIComponent(location.pathname + location.search);
 }
 
