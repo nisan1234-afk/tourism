@@ -1240,6 +1240,7 @@ function openLessonInline(unitId) {
     <div style="margin-top:16px;">${presentBtn}</div>
     ${sectionLinksHTML}
   `;
+  restoreLessonInputs(l.blocks);
 
   (l.blocks || []).forEach(b => {
     if (b.block_type === 'game') {
@@ -1339,7 +1340,7 @@ function renderQuestionBlock(unitId, block, glossary) {
   const feedback = block.saved_feedback
     ? `<div class="qa-feedback" id="qa_feedback_${block.block_id}">${escapeHtml(block.saved_feedback)}</div>` : `<div class="qa-feedback" id="qa_feedback_${block.block_id}"></div>`;
   return `
-    <div class="lesson-block lesson-block-question">
+    <div class="lesson-block lesson-block-question" data-block-id="${escapeHtml(block.block_id)}">
       <div class="block-title">🎯 ${escapeHtml(block.title || 'שאלה אישית')}${scorePill}</div>
       <div class="block-question-prompt">${glossarize(block.question_prompt, glossary)}</div>
       <textarea class="field-textarea" id="qa_${block.block_id}" rows="3" placeholder="כתבו כאן את התשובה שלכם...">${escapeHtml(block.saved_answer || '')}</textarea>
@@ -1396,10 +1397,10 @@ function renderQuizBlock(block, glossary) {
     </div>`;
 }
 
-function checkQuizAnswer(blockId) {
+function checkQuizAnswer(blockId, silent) {
   const q = quizConfig[blockId] || {};
   const feedbackEl = document.getElementById('quiz_feedback_' + blockId);
-  let isMatch;
+  let isMatch, chosenToSave;
 
   if (q.mode === 'classify') {
     const selects = [...document.querySelectorAll('.quiz-classify[data-block="' + blockId + '"]')]
@@ -1407,12 +1408,16 @@ function checkQuizAnswer(blockId) {
     const chosen = selects.map(el => el.value === '' ? -1 : parseInt(el.value, 10));
     const correctMap = q.correctMap || [];
     isMatch = chosen.length === correctMap.length && chosen.every((v, i) => v === correctMap[i]);
+    chosenToSave = chosen;
   } else {
     const correct = (q.correct || []).slice().sort();
     const checked = [...document.querySelectorAll('.quiz-opt[data-block="' + blockId + '"]:checked')]
       .map(el => parseInt(el.dataset.idx, 10)).sort();
     isMatch = correct.length === checked.length && correct.every((v, i) => v === checked[i]);
+    chosenToSave = checked;
   }
+  // עד 10.2026 תשובות הבוחן לא נשמרו בכלל, ורענון מחק אותן. עכשיו כל "בדוק תשובה" נשמר בשרת.
+  if (!silent) saveQuizAnswer(blockId, chosenToSave);
 
   if (feedbackEl) {
     feedbackEl.textContent = isMatch ? (q.feedbackCorrect || '✓ נכון!') : (q.feedbackIncorrect || 'כמעט. נסו שוב.');
@@ -1449,7 +1454,7 @@ function renderStructuredQuestionBlock(unitId, block, glossary) {
     </label>`).join('');
 
   return `
-    <div class="lesson-block lesson-block-question">
+    <div class="lesson-block lesson-block-question" data-block-id="${escapeHtml(block.block_id)}">
       <div class="block-title">📝 ${escapeHtml(block.title || 'שאלה אישית')}${scorePill}</div>
       <div class="block-question-prompt">${glossarize(block.question_prompt, glossary)}</div>
       ${categories ? `<div class="field-group"><div class="field-label">סמנו קטגוריות רלוונטיות:</div>${categories}</div>` : ''}
@@ -1652,6 +1657,7 @@ async function saveLessonAnswerCore(unitId, blockId, text, statusEl) {
         b.saved_feedback = res.score_feedback || '';
       }
     }));
+    clearLessonDraft(blockId);
     if (statusEl) { statusEl.textContent = '✓ נשמר'; statusEl.style.color = 'var(--success)'; }
 
     const scorePill = document.getElementById('qa_score_' + blockId);
@@ -1668,6 +1674,137 @@ async function saveLessonAnswerCore(unitId, blockId, text, statusEl) {
   } catch (e) {
     if (statusEl) { statusEl.textContent = 'שגיאה: ' + e.message; statusEl.style.color = 'var(--error)'; }
   }
+}
+
+// ========== שמירה ושחזור של תשובות ביחידות ==========
+// בוחן (quiz) נשמר בשרת כ-JSON בכל "בדוק תשובה". שאלות פתוחות/מובנות: מה שמוקלד נשמר גם
+// כטיוטה במכשיר, כדי שרענון לפני "שמור תשובה" לא ימחק אותו, ושדות מובנים מתמלאים מחדש מהתשובה השמורה.
+
+function lessonDraftKey(blockId) { return 'td:lessondraft:' + (groupData ? groupData.group_id : '') + ':' + blockId; }
+
+function readLessonDraft(blockId) {
+  try { const d = JSON.parse(localStorage.getItem(lessonDraftKey(blockId)) || 'null'); return d && d.data ? d.data : null; }
+  catch (e) { return null; }
+}
+
+function clearLessonDraft(blockId) { try { localStorage.removeItem(lessonDraftKey(blockId)); } catch (e) {} }
+
+function unitIdOfBlock(blockId) {
+  const l = allLessons.find(x => (x.blocks || []).some(b => b.block_id === blockId));
+  return l ? l.unit_id : (presentLesson ? presentLesson.unit_id : '');
+}
+
+async function saveQuizAnswer(blockId, chosen) {
+  const block = findBlockById(blockId);
+  const text = JSON.stringify({ quiz: chosen || [] });
+  if (!groupData || (block && block.saved_answer === text)) return;
+  try {
+    await callAPI('saveLessonAnswer', { group_id: groupData.group_id, unit_id: unitIdOfBlock(blockId), block_id: blockId, answer_text: text });
+    if (block) block.saved_answer = text;
+  } catch (e) { /* הבדיקה עצמה כבר הוצגה; שמירה שנכשלה לא מפריעה לתלמיד */ }
+}
+
+function restoreLessonInputs(blocks) {
+  (blocks || []).forEach(b => {
+    try {
+      if (b.block_type === 'quiz') restoreQuiz(b);
+      else if (b.block_type === 'question') restoreQuestion(b);
+      else if (b.block_type === 'question_structured') restoreStructured(b);
+    } catch (e) { /* תשובה שמורה בפורמט לא צפוי: מציגים את הבלוק ריק */ }
+  });
+}
+
+function restoreQuiz(b) {
+  let saved;
+  try { saved = JSON.parse(b.saved_answer || ''); } catch (e) { return; }
+  if (!saved || !Array.isArray(saved.quiz)) return;
+  const q = quizConfig[b.block_id] || {};
+  if (q.mode === 'classify') {
+    document.querySelectorAll('.quiz-classify[data-block="' + b.block_id + '"]').forEach(el => {
+      const v = saved.quiz[parseInt(el.dataset.idx, 10)];
+      el.value = (v === undefined || v < 0) ? '' : String(v);
+    });
+  } else {
+    document.querySelectorAll('.quiz-opt[data-block="' + b.block_id + '"]').forEach(el => {
+      el.checked = saved.quiz.includes(parseInt(el.dataset.idx, 10));
+    });
+  }
+  checkQuizAnswer(b.block_id, true);
+}
+
+function showDraftNotice(blockId) {
+  const st = document.getElementById('qa_status_' + blockId);
+  if (st) { st.textContent = 'שוחזרה טיוטה שלא נשמרה. לחצו "שמור תשובה"'; st.style.color = 'var(--warning)'; }
+}
+
+function restoreQuestion(b) {
+  const ta = document.getElementById('qa_' + b.block_id);
+  const draft = readLessonDraft(b.block_id);
+  if (ta && draft && typeof draft.text === 'string' && draft.text !== (b.saved_answer || '')) {
+    ta.value = draft.text;
+    showDraftNotice(b.block_id);
+  }
+}
+
+/** ערכי כל השדות של שאלה מובנית, לפי id (ולתיבות סימון לפי אינדקס). */
+function readStructuredFields(blockId) {
+  const box = document.querySelector('[data-block-id="' + blockId + '"]');
+  if (!box) return null;
+  const data = { cats: [], fields: {}, rating: '' };
+  box.querySelectorAll('.sq-cat:checked').forEach(el => data.cats.push(parseInt(el.dataset.idx, 10)));
+  box.querySelectorAll('input[type="text"]').forEach(el => { if (el.id) data.fields[el.id] = el.value; });
+  const r = box.querySelector('.sq-rating:checked');
+  if (r) data.rating = r.value;
+  return data;
+}
+
+function applyStructuredFields(blockId, data) {
+  const box = document.querySelector('[data-block-id="' + blockId + '"]');
+  if (!box || !data) return;
+  box.querySelectorAll('.sq-cat').forEach(el => { el.checked = (data.cats || []).includes(parseInt(el.dataset.idx, 10)); });
+  Object.keys(data.fields || {}).forEach(id => { const el = document.getElementById(id); if (el && box.contains(el)) el.value = data.fields[id]; });
+  box.querySelectorAll('.sq-rating').forEach(el => { el.checked = el.value === data.rating; });
+}
+
+/** מפרק את הטקסט ששמר saveSQBlock ("תווית ערך" בכל שורה) חזרה לשדות. */
+function parseStructuredAnswer(b) {
+  const sq = b.game_data || {};
+  const id = b.block_id;
+  const data = { cats: [], fields: {}, rating: '' };
+  const rules = [];
+  rules.push(['קטגוריות שנבחרו: ', v => v.split(', ').forEach(c => { const i = (sq.categories || []).indexOf(c); if (i >= 0) data.cats.push(i); })]);
+  if (sq.fillPrompt) rules.push([(sq.fillPrompt || 'השלמה:') + ' ', v => { data.fields['sq_fill_' + id] = v; }]);
+  if (sq.evidenceLabel) rules.push([(sq.evidenceLabel || 'הוכחה:') + ' ', v => { data.fields['sq_evidence_' + id] = v; }]);
+  if (sq.evidenceLinkLabel) rules.push([(sq.evidenceLinkLabel || 'קישור/צילום מסך:') + ' ', v => { data.fields['sq_evidence_link_' + id] = v; }]);
+  (sq.explainParts || []).forEach((label, i) => rules.push([label + ' ', v => { data.fields['sq_explain_' + id + '_' + i] = v; }]));
+  if (sq.ratingOptions && sq.ratingOptions.length) rules.push([(sq.ratingLabel || 'הערכה:') + ' ', v => { data.rating = v; }]);
+  if (sq.ratingReasonLabel) rules.push([(sq.ratingReasonLabel || 'נימוק:') + ' ', v => { data.fields['sq_rating_reason_' + id] = v; }]);
+  rules.sort((a, b2) => b2[0].length - a[0].length); // תווית ארוכה קודם, למקרה שאחת היא תחילית של אחרת
+  String(b.saved_answer || '').split('\n').forEach(line => {
+    const rule = rules.find(r => line.startsWith(r[0]));
+    if (rule) rule[1](line.slice(rule[0].length));
+  });
+  return data;
+}
+
+function restoreStructured(b) {
+  const draft = readLessonDraft(b.block_id);
+  if (b.saved_answer) applyStructuredFields(b.block_id, parseStructuredAnswer(b));
+  if (draft) { applyStructuredFields(b.block_id, draft); showDraftNotice(b.block_id); }
+}
+
+// כל הקלדה בשאלה פתוחה/מובנית נשמרת כטיוטה במכשיר
+document.addEventListener('input', onLessonInput);
+document.addEventListener('change', onLessonInput);
+function onLessonInput(e) {
+  const box = e.target.closest && e.target.closest('.lesson-block[data-block-id]');
+  if (!box) return;
+  const blockId = box.dataset.blockId;
+  const ta = document.getElementById('qa_' + blockId);
+  const data = ta ? { text: ta.value } : readStructuredFields(blockId);
+  try { localStorage.setItem(lessonDraftKey(blockId), JSON.stringify({ data, ts: Date.now() })); } catch (err) {}
+  const st = document.getElementById('qa_status_' + blockId);
+  if (st) { st.textContent = 'לא נשמר עדיין. לחצו "שמור תשובה"'; st.style.color = 'var(--muted)'; }
 }
 
 function saveQABlock(unitId, blockId) {
@@ -1746,7 +1883,9 @@ function renderPresentSlide() {
     stage.innerHTML = renderQuizBlock(block, glossary);
   } else if (block.block_type === 'question_structured') {
     stage.innerHTML = renderStructuredQuestionBlock(presentLesson.unit_id, block, glossary);
-  } else if (block.block_type === 'game') {
+  }
+  if (block.block_type !== 'game') restoreLessonInputs([block]);
+  if (block.block_type === 'game') {
     stage.innerHTML = renderGameBlockShell(block);
     if (!gameStates[block.block_id]) gameStates[block.block_id] = block.game_type === 'memory' ? initMemoryState(block) : initFlashState(block);
     paintGame(block.block_id, block.game_type);
