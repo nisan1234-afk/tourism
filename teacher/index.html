@@ -359,8 +359,8 @@
   <div id="waitingCard"></div>
 
   <div class="tabs-row">
-    <button class="tab-btn" onclick="switchTab('groups', this)">קבוצות</button>
     <button class="tab-btn" onclick="switchTab('classes', this)">כיתות</button>
+    <button class="tab-btn" onclick="switchTab('groups', this)">קבוצות</button>
     <button class="tab-btn active" onclick="switchTab('units', this)">יחידות לימוד</button>
     <button class="tab-btn" onclick="switchTab('findings', this)">ממצאים לתוצר <span id="findingsPendingBadge"></span></button>
   </div>
@@ -994,10 +994,14 @@ function renderStats() {
 
 function renderGroups(groups) {
   const tbody = document.getElementById('groupsBody');
-  if (!groups.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state">אין קבוצות — לחצו "+ הוסף קבוצה"</td></tr>'; return; }
+  const filtering = groups !== allGroups;
+  if (!allClasses.length && !groups.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state">קודם יוצרים כיתה (טאב "כיתות" ← "+ כיתה חדשה"), ואז מוסיפים לה קבוצות.</td></tr>'; return; }
+  if (filtering && !groups.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state">אין קבוצות שמתאימות לחיפוש</td></tr>'; return; }
 
-  // מקבצים לפי כיתה — בית ספר ← כיתה ← קבוצה ← תלמיד
+  // מקבצים לפי כיתה — בית ספר ← כיתה ← קבוצה ← תלמיד. כיתה בלי קבוצות מוצגת גם היא (כשלא מסננים),
+  // כדי שאפשר יהיה ליצור כיתה ואז להוסיף לה קבוצות ישירות מהכותרת שלה.
   const byClass = {};
+  if (!filtering) allClasses.forEach(c => { byClass[c.class_id] = []; });
   groups.forEach(g => {
     const key = g.class_id || '';
     if (!byClass[key]) byClass[key] = [];
@@ -1014,8 +1018,12 @@ function renderGroups(groups) {
   tbody.innerHTML = classOrder.map(classKey => {
     const className = classKey ? (allClasses.find(c => c.class_id === classKey)?.class_name || classKey) : 'ללא כיתה';
     const code = classKey ? classCodeOf(classKey) : '';
-    const header = `<tr><td colspan="8" style="background:var(--dark2);font-family:var(--font-display);font-weight:700;font-size:13px;padding:10px 14px;">🏫 כיתה ${escapeHtml(className)}${code ? ` <span style="font-weight:400;color:var(--muted);margin-right:10px;">קוד הרשמה:</span> <span class="join-code">${escapeHtml(code)}</span>` : ''}</td></tr>`;
-    return header + byClass[classKey].map(g => renderGroupRow(g)).join('');
+    const addBtn = classKey ? `<button class="btn-sm btn-primary" style="float:left;" onclick="openAddGroupModal('${escapeHtml(classKey)}')">+ קבוצה בכיתה הזו</button>` : '';
+    const header = `<tr><td colspan="8" style="background:var(--dark2);font-family:var(--font-display);font-weight:700;font-size:13px;padding:10px 14px;">${addBtn}🏫 כיתה ${escapeHtml(className)}${code ? ` <span style="font-weight:400;color:var(--muted);margin-right:10px;">קוד הרשמה:</span> <span class="join-code">${escapeHtml(code)}</span>` : ''}</td></tr>`;
+    const rows = byClass[classKey].length
+      ? byClass[classKey].map(g => renderGroupRow(g)).join('')
+      : '<tr><td colspan="8" class="empty-state" style="padding:14px;">עדיין אין קבוצות בכיתה הזו</td></tr>';
+    return header + rows;
   }).join('');
 }
 
@@ -1758,10 +1766,12 @@ async function moveBlock(blockId, dir) {
   } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
-function openAddGroupModal() {
+function openAddGroupModal(classId) {
   const sel = document.getElementById('groupClass');
-  sel.innerHTML = '<option value="">ללא כיתה</option>' +
-    allClasses.map(c => `<option value="${c.class_id}">${escapeHtml(c.class_name)}</option>`).join('');
+  sel.innerHTML = allClasses.map(c => `<option value="${c.class_id}">${escapeHtml(c.class_name)}</option>`).join('') +
+    '<option value="">ללא כיתה</option>';
+  // כיתה קודם, קבוצה אחר כך: ברירת המחדל היא הכיתה שממנה לחצו (או הראשונה ברשימה)
+  sel.value = classId || (allClasses[0] ? allClasses[0].class_id : '');
   document.getElementById('groupName').value = '';
   document.getElementById('groupMembers').value = '';
   document.getElementById('addGroupResult').textContent = '';
@@ -1923,10 +1933,12 @@ async function saveClass() {
   btn.disabled = true;
   resEl.textContent = 'שומר...'; resEl.style.color = 'var(--muted)';
   try {
+    let created = null;
     if (classId) await callAPI('updateClass', { class_id: classId, class_name: name });
-    else await callAPI('addClass', { class_name: name });
+    else created = await callAPI('addClass', { class_name: name });
     hideModal('addClassModal');
     await loadData();
+    if (created && created.class_id && confirm('הכיתה "' + name + '" נוצרה. להוסיף לה עכשיו קבוצה?')) openAddGroupModal(created.class_id);
   } catch(e) { resEl.textContent = 'שגיאה: ' + e.message; resEl.style.color = 'var(--error)'; }
   finally { btn.disabled = false; }
 }
@@ -1953,6 +1965,7 @@ function renderClasses() {
         <td>${count}</td>
         <td>${classCodeCell(c.class_id)}</td>
         <td>
+          <button class="btn-sm btn-primary" onclick="openAddGroupModal('${c.class_id}')">+ קבוצה</button>
           <button class="btn-sm btn-back" onclick="openEditClassModal('${c.class_id}')">✏️ ערוך</button>
           <button class="btn-sm btn-danger" onclick="deleteClassClick('${c.class_id}')">🗑️ מחק</button>
         </td>
