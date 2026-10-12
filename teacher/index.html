@@ -185,7 +185,7 @@
     .waiting-row select { width: auto; min-width: 150px; padding: 6px 8px; }
     .member-remove { background: transparent; border: none; color: var(--error); cursor: pointer; font-size: 13px; }
     .add-member-row { display: flex; gap: 6px; margin-top: 8px; }
-    .add-member-row input { flex: 1; }
+    .add-member-row input, .add-member-row select { flex: 1; }
     .add-member-row button { padding: 8px 14px; background: linear-gradient(135deg, var(--teal), var(--blue)); border: none; border-radius: 9px; color: white; font-family: 'Heebo', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 
     /* SECTIONS DETAIL */
@@ -1169,6 +1169,18 @@ async function openGroupModal(group_id) {
           <button onclick="addMember('${group_id}')">הוסף</button>
         </div>
       </div>
+      ${allGroups.length > 1 ? `
+      <div class="group-subsection">
+        <div class="group-subsection-title">🔗 צירוף קבוצה אחרת לקבוצה הזו</div>
+        <div class="form-hint" style="margin-bottom:8px;">התלמידים והעבודה של הקבוצה שתבחרו עוברים לכאן. תשובות שקיימות בשתי הקבוצות נשמרות שתיהן (של הקבוצה השנייה מתחת). הקבוצה שנבחרה נמחקת אחרי המיזוג.</div>
+        <div class="add-member-row">
+          <select id="mergeSourceSelect">
+            <option value="">בחרו קבוצה לצרף…</option>
+            ${allGroups.filter(g => g.group_id !== group_id).map(g => `<option value="${escapeHtml(g.group_id)}">${escapeHtml(g.group_name || g.group_id)} (${escapeHtml((g.members || []).join(', '))})</option>`).join('')}
+          </select>
+          <button onclick="mergeIntoGroup('${escapeHtml(group_id)}')">צרף לכאן</button>
+        </div>
+      </div>` : ''}
       <div class="group-subsection">
         <div class="group-subsection-title">✏️ עריכה והערות על סעיפי הפרויקט</div>
         <div class="form-group">
@@ -1337,6 +1349,19 @@ async function addMember(group_id) {
     await loadData();
     openGroupModal(group_id);
   } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function mergeIntoGroup(target_group_id) {
+  const source_group_id = document.getElementById('mergeSourceSelect').value;
+  if (!source_group_id) { alert('בחרו קבוצה לצרף'); return; }
+  const target = allGroups.find(g => g.group_id === target_group_id) || {};
+  const source = allGroups.find(g => g.group_id === source_group_id) || {};
+  if (!confirm('לצרף את "' + (source.group_name || '') + '" לתוך "' + (target.group_name || '') + '"?\n\nהתלמידים והתשובות עוברים לכאן, והקבוצה "' + (source.group_name || '') + '" תימחק. אי אפשר לבטל.')) return;
+  try {
+    await callAPI('mergeGroups', { target_group_id, source_group_id });
+    await loadData();
+    openGroupModal(target_group_id);
+  } catch (e) { alert('שגיאה: ' + e.message); }
 }
 
 async function removeMember(group_id, email) {
