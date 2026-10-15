@@ -1309,6 +1309,21 @@ function isValidEmail(m) {
   return /^[^@\s,]+@[^@\s,]+\.[^@\s,]+$/.test(String(m || '').trim());
 }
 
+/** כתובת שאפשר להטמיע ב-iframe: יוטיוב (watch / youtu.be / shorts) ← embed, דרייב ← preview. יוטיוב חוסם iframe של watch. */
+function toEmbedUrl(url) {
+  const u = String(url || '').trim();
+  let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/i);
+  if (m) {
+    const t = u.match(/[?&](?:t|start)=(\d+)/);
+    return 'https://www.youtube.com/embed/' + m[1] + (t ? '?start=' + t[1] : '');
+  }
+  m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/i);
+  if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
+  m = u.match(/vimeo\.com\/(\d+)/i);
+  if (m && !/player\.vimeo/.test(u)) return 'https://player.vimeo.com/video/' + m[1];
+  return u;
+}
+
 function escapeHtml(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -1460,7 +1475,7 @@ function renderLivePreview() {
 
   const embedWrap  = document.getElementById('previewEmbedWrap');
   const embedFrame = document.getElementById('previewEmbedFrame');
-  if (embedUrl) { embedFrame.src = embedUrl; embedWrap.style.display = 'block'; } else { embedWrap.style.display = 'none'; embedFrame.src = ''; }
+  if (embedUrl) { embedFrame.src = toEmbedUrl(embedUrl); embedWrap.style.display = 'block'; } else { embedWrap.style.display = 'none'; embedFrame.src = ''; }
 
   document.getElementById('previewSummary').textContent    = summary || '';
   document.getElementById('previewAssignment').textContent = assignment ? '📝 ' + assignment : '';
@@ -2172,7 +2187,7 @@ function renderPresentSlide() {
   if (block.block_type === 'teach') {
     const mediaUrl = safeUrl(block.media_url);
     const media = block.media_type === 'video' && mediaUrl
-      ? `<div class="present-embed"><iframe src="${mediaUrl}" allowfullscreen></iframe></div>`
+      ? `<div class="present-embed"><iframe src="${safeUrl(toEmbedUrl(block.media_url))}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
       : (block.media_type === 'image' && mediaUrl ? `<img src="${mediaUrl}" />` : '');
     stage.innerHTML = `
       <div class="present-slide-title">📖 ${escapeHtml(block.title)}</div>

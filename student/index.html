@@ -1252,6 +1252,21 @@ function openLessonInline(unitId) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/** כתובת שאפשר להטמיע ב-iframe: יוטיוב (watch / youtu.be / shorts) ← embed, דרייב ← preview. יוטיוב חוסם iframe של watch. */
+function toEmbedUrl(url) {
+  const u = String(url || '').trim();
+  let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|live\/|embed\/)|youtu\.be\/)([\w-]{11})/i);
+  if (m) {
+    const t = u.match(/[?&](?:t|start)=(\d+)/);
+    return 'https://www.youtube.com/embed/' + m[1] + (t ? '?start=' + t[1] : '');
+  }
+  m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/i);
+  if (m) return 'https://drive.google.com/file/d/' + m[1] + '/preview';
+  m = u.match(/vimeo\.com\/(\d+)/i);
+  if (m && !/player\.vimeo/.test(u)) return 'https://player.vimeo.com/video/' + m[1];
+  return u;
+}
+
 function escapeHtml(str) {
   return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -1298,7 +1313,7 @@ function renderLessonBlocks(lesson) {
   const glossary = getGlossaryForLesson(lesson);
   if (!lesson.blocks || !lesson.blocks.length) {
     const imageHtml = safeUrl(lesson.image_url) ? `<img class="lesson-teach-img" src="${safeUrl(lesson.image_url)}" />` : '';
-    const embedHtml = safeUrl(lesson.embed_url) ? `<div class="lesson-embed-wrap"><iframe src="${safeUrl(lesson.embed_url)}" allowfullscreen></iframe></div>` : '';
+    const embedHtml = safeUrl(lesson.embed_url) ? `<div class="lesson-embed-wrap"><iframe src="${safeUrl(toEmbedUrl(lesson.embed_url))}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>` : '';
     return `${imageHtml}${embedHtml}
       ${lesson.summary ? `<div class="lesson-summary">${glossarize(lesson.summary, glossary)}</div>` : ''}
       ${lesson.assignment_summary ? `<div class="lesson-assignment">📝 ${glossarize(lesson.assignment_summary, glossary)}</div>` : ''}`;
@@ -1324,7 +1339,7 @@ function findBlockById(blockId) {
 function renderTeachBlock(block, glossary) {
   const mediaUrl = safeUrl(block.media_url);
   const media = block.media_type === 'video' && mediaUrl
-    ? `<div class="lesson-embed-wrap"><iframe src="${mediaUrl}" allowfullscreen></iframe></div>`
+    ? `<div class="lesson-embed-wrap"><iframe src="${safeUrl(toEmbedUrl(block.media_url))}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`
     : (block.media_type === 'image' && mediaUrl ? `<img class="lesson-teach-img" src="${mediaUrl}" />` : '');
   return `
     <div class="lesson-block lesson-block-teach">
